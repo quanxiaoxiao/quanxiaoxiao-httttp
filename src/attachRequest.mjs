@@ -149,6 +149,7 @@ export default ({
             assert(!signal.aborted);
           }
           if (detach()) {
+            signal.removeEventListener('abort', handleAbortOnSignal);
             forwardWebsocket({
               ctx,
               onForwardConnect,
@@ -254,6 +255,18 @@ export default ({
       },
     });
   };
+
+  function handleAbortOnSignal() {
+    if (state.ctx
+      && state.ctx.request
+      && state.ctx.request.write
+      && !state.ctx.request.destroyed
+    ) {
+      state.ctx.request.destroy();
+    }
+  }
+
+  signal.addEventListener('abort', handleAbortOnSignal, { once: true });
 
   return async (chunk) => {
     assert(!signal.aborted);
