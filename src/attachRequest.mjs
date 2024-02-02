@@ -164,8 +164,8 @@ export default ({
           if (ctx.request.headers['content-length'] > 0
               || /^chunked$/i.test(ctx.request.headers['transfer-encoding'])) {
             if (ctx.request.body) {
-              assert(ctx.request.writable);
-              assert(ctx.request.readable);
+              assert(ctx.request.body.writable);
+              assert(ctx.request.body.readable);
             } else {
               ctx.request.body = new PassThrough();
             }
