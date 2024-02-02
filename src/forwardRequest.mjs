@@ -52,6 +52,8 @@ export default async ({
     assert(!signal.aborted);
   }
 
+  assert(Array.isArray(ctx.requestForward.headers));
+
   const forwardOptions = {
     signal,
     method: ctx.requestForward.method,

@@ -63,8 +63,7 @@ export default ({
           await ctx.onResponse(ctx);
           assert(!signal.aborted);
         }
-        const responseObj = generateResponse(ctx);
-        ctx.socket.write(http.encodeHttp(responseObj));
+        ctx.socket.write(http.encodeHttp(generateResponse(ctx)));
         state.ctx = null;
         if (onHttpResponseEnd) {
           try {
@@ -96,8 +95,7 @@ export default ({
     if (ctx.onResponse) {
       await ctx.onResponse(ctx);
       assert(!signal.aborted);
-      const responseObj = generateResponse(ctx);
-      ctx.socket.write(http.encodeHttp(responseObj));
+      ctx.socket.write(http.encodeHttp(generateResponse(ctx)));
     }
     state.ctx = null;
     if (onHttpResponseEnd) {
