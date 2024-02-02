@@ -162,7 +162,12 @@ export default ({
         } else if (!ctx.onRequest) {
           if (ctx.request.headers['content-length'] > 0
               || /^chunked$/i.test(ctx.request.headers['transfer-encoding'])) {
-            ctx.request.body = new PassThrough();
+            if (ctx.request.body) {
+              assert(ctx.request.writable);
+              assert(ctx.request.readable);
+            } else {
+              ctx.request.body = new PassThrough();
+            }
 
             const streamThrottle = () => {
               const handleBodyOnPause = () => {
