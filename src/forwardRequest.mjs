@@ -144,14 +144,14 @@ export default async ({
         state.transform.once('drain', () => {
           setTimeout(() => {
             resolve();
-          });
+          }, 5);
         });
       }) : Promise.resolve(),
       ctx.socket.writableNeedDrain ? new Promise((resolve) => {
         ctx.socket.once('drain', () => {
           setTimeout(() => {
             resolve();
-          });
+          }, 5);
         });
       }) : Promise.resolve(),
     ]);
