@@ -3,7 +3,7 @@
   "version": "0.1.4",
   "type": "module",
   "scripts": {
-    "test": "node --test",
+    "test": "NODE_ENV=test node --test",
     "lint": "tsc"
   },
   "main": "./src/index.mjs",

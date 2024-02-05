@@ -2,7 +2,7 @@
 import process from 'node:process';
 import attachRequest from './attachRequest.mjs';
 
-export default (hooks) => (socket) => {
+export default (hooks) => (socket) => { // eslint-disable-line consistent-return
   const controller = new AbortController();
 
   const state = {
@@ -128,5 +128,7 @@ export default (hooks) => (socket) => {
     });
   }
 
-  return () => state;
+  if (process.env.NODE_ENV === 'test') {
+    return () => state;
+  }
 };

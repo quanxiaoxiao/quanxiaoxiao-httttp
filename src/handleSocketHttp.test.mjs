@@ -90,6 +90,7 @@ test('handleSocketHttp socket onData with invalid http chunk', () => {
     setImmediate(() => {
       assert(getState().isEndEmit);
       assert(getState().signal.aborted);
+      assert(getState().isErrorEventBind);
       assert(!pass.eventNames().includes('data'));
       assert(!pass.eventNames().includes('close'));
     });
