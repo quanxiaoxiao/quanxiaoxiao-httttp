@@ -2,21 +2,16 @@
 import process from 'node:process';
 import attachRequest from './attachRequest.mjs';
 
-export default ({
-  onSocketConnect,
-  ...hooks
-}) => (socket) => {
-  if (onSocketConnect) {
-    onSocketConnect(socket);
-  }
-
+export default (hooks) => (socket) => {
   const controller = new AbortController();
 
   const state = {
     isEndEventBind: false,
-    isErrorEventBind: true,
+    isErrorEventBind: false,
     isEndEmit: false,
     encode: null,
+    socket,
+    signal: controller.signal,
   };
 
   function bindEncode() {
@@ -120,8 +115,11 @@ export default ({
   }
 
   if (!socket.destroyed) {
+    state.isErrorEventBind = true;
     socket.once('error', handleErrorOnSocket);
-    socket.once('close', handleCloseOnSocket);
+    if (!controller.signal.aborted) {
+      socket.once('close', handleCloseOnSocket);
+    }
 
     process.nextTick(() => {
       if (!controller.signal.aborted) {
@@ -129,4 +127,6 @@ export default ({
       }
     });
   }
+
+  return () => state;
 };
