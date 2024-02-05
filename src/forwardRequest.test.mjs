@@ -243,6 +243,7 @@ test('forwardRequest response body with stream', async () => {
     signal: controller.signal,
     ctx,
   });
+  await waitFor(200);
   assert(ctx.requestForward.onBody.destroyed);
   assert.equal(ctx.response.body, null);
   assert.equal(ctx.response.bytesBody, 11);
@@ -253,6 +254,5 @@ test('forwardRequest response body with stream', async () => {
   assert.equal(_socket.write.mock.calls[3].arguments[0].toString(), '3\r\nccc\r\n');
   assert.equal(_socket.write.mock.calls[4].arguments[0].toString(), '3\r\nddd\r\n');
   assert.equal(_socket.write.mock.calls[5].arguments[0].toString(), '0\r\n\r\n');
-  await waitFor(200);
   server.close();
 });

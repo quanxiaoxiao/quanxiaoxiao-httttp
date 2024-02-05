@@ -142,18 +142,24 @@ export default async ({
     await Promise.all([
       state.transform.writableNeedDrain ? new Promise((resolve) => {
         state.transform.once('drain', () => {
-          resolve();
+          setTimeout(() => {
+            resolve();
+          });
         });
       }) : Promise.resolve(),
       ctx.socket.writableNeedDrain ? new Promise((resolve) => {
         ctx.socket.once('drain', () => {
-          resolve();
+          setTimeout(() => {
+            resolve();
+          });
         });
       }) : Promise.resolve(),
     ]);
     assert(!signal.aborted);
-    state.transform.unpipe(ctx.socket);
-    forwardOptions.onBody.destroy();
-    ctx.socket.write(state.encode());
+    setTimeout(() => {
+      state.transform.unpipe(ctx.socket);
+      forwardOptions.onBody.destroy();
+      ctx.socket.write(state.encode());
+    });
   }
 };
