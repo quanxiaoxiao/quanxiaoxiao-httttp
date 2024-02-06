@@ -33,47 +33,45 @@ test('handleSocketHttp', () => {
   }, 500);
 });
 
-test('handleSocketHttp socket close', () => {
-  const pass = new PassThrough();
-  const getState = handleSocketHttp({})(pass);
-  setTimeout(() => {
-    assert(getState().signal.aborted);
-    assert(!pass.eventNames().includes('close'));
-    assert(!pass.eventNames().includes('data'));
-  }, 10);
-  setTimeout(() => {
-    assert(!pass.eventNames().includes('error'));
-    assert(!getState().isErrorEventBind);
-  }, 500);
-  setImmediate(() => {
-    assert(getState().isErrorEventBind);
-    assert(pass.eventNames().includes('data'));
-    pass.end();
-  });
-});
-
 test('handleSocketHttp destroyed socket before handler', () => {
+  const onFinish = mock.fn((state) => {
+    assert.equal(typeof state.dateTimeCreate, 'number');
+    assert.equal(state.bytesRead, 0);
+    assert.equal(state.bytesWritten, 0);
+    assert.equal(state.count, 0);
+  });
   const pass = new PassThrough();
   pass.destroy();
-  const getState = handleSocketHttp({})(pass);
+  handleSocketHttp({
+    onFinish,
+  })(pass);
   assert(!pass.eventNames().includes('error'));
   assert(!pass.eventNames().includes('close'));
   assert(!pass.eventNames().includes('data'));
   setImmediate(() => {
-    assert.equal(getState().encode, null);
+    assert.equal(onFinish.mock.calls.length, 1);
+    assert(!pass.eventNames().includes('error'));
+    assert(!pass.eventNames().includes('close'));
   });
 });
 
 test('handleSocketHttp destroyed socket after handler', () => {
+  const onFinish = mock.fn((state) => {
+    assert.equal(typeof state.dateTimeCreate, 'number');
+    assert.equal(state.bytesRead, 0);
+    assert.equal(state.bytesWritten, 0);
+    assert.equal(state.count, 0);
+  });
   const pass = new PassThrough();
-  const getState = handleSocketHttp({})(pass);
+  handleSocketHttp({
+    onFinish,
+  })(pass);
   pass.destroy();
   setImmediate(() => {
-    assert(getState().signal.aborted);
+    assert.equal(onFinish.mock.calls.length, 1);
     assert(!pass.eventNames().includes('data'));
   });
   setTimeout(() => {
-    assert(!getState().isErrorEventBind);
     assert(!pass.eventNames().includes('error'));
   }, 500);
 });
