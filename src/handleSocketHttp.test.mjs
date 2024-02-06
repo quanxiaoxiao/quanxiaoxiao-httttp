@@ -99,15 +99,18 @@ test('handleSocketHttp socket emit error', () => {
 });
 
 test('handleSocketHttp socket onData with invalid http chunk', () => {
-  const pass = new PassThrough();
-  const onHttpError = mock.fn(() => {});
-  const onHttpRequestStartLine = mock.fn(() => {});
   const buf = Buffer.from('GET /test HTTP/1.1\n\n');
   const onFinish = mock.fn((state) => {
     assert.equal(typeof state.dateTimeCreate, 'number');
     assert.equal(state.bytesRead, buf.length);
     assert.equal(state.bytesWritten, 0);
     assert.equal(state.count, 0);
+  });
+  const pass = new PassThrough();
+  const onHttpRequestStartLine = mock.fn(() => {});
+  const onHttpError = mock.fn((ctx) => {
+    assert.equal(ctx.error.statusCode, 400);
+    assert.equal(onFinish.mock.calls.length, 0);
   });
 
   handleSocketHttp({
@@ -130,8 +133,8 @@ test('handleSocketHttp socket onData with invalid http chunk', () => {
     assert(!pass.eventNames().includes('data'));
     assert(!pass.eventNames().includes('close'));
     assert(!pass.eventNames().includes('end'));
+    assert.equal(onFinish.mock.calls.length, 1);
     assert.equal(onHttpError.mock.calls.length, 1);
-    assert.equal(onHttpError.mock.calls[0].arguments[0].error.statusCode, 400);
     assert.equal(onHttpRequestStartLine.mock.calls.length, 0);
   }, 500);
 });
