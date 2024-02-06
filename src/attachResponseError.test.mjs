@@ -16,6 +16,7 @@ test('attachResponseError', () => {
   attachResponseError(ctx);
   assert.equal(ctx.response.statusCode, 500);
   assert.equal(ctx.response.statusText, STATUS_CODES[500]);
+  assert.equal(typeof ctx.response.headers.Date, 'string');
 
   ctx.error = createError(404, 'test not found');
   ctx.response.body = 'aaaaaaa';
