@@ -143,6 +143,9 @@ export default ({
     if (!controller.signal.aborted) {
       controller.abort();
     }
+    if (!socket.destroyed) {
+      socket.destroy();
+    }
     emitFinish();
   }
 
