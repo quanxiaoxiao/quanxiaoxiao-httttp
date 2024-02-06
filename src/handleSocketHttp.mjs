@@ -103,6 +103,9 @@ export default ({
       try {
         await state.decode(chunk);
       } catch (error) {
+        if (!controller.signal) {
+          console.error(error);
+        }
         if (!socket.destroyed) {
           socket.destroy();
         }
