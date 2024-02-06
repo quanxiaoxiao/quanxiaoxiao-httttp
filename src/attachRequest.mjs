@@ -102,15 +102,15 @@ export default ({
         ctx.request.path = ret.href || '/';
         ctx.request.pathname = pathname || '/';
         ctx.request.querystring = querystring;
-        if (onHttpRequestStartLine) {
-          await onHttpRequestStartLine(ctx);
-          assert(!signal.aborted);
-        }
         if (querystring) {
           const query = qs.parse(querystring);
           if (qs.stringify(query) === querystring) {
             ctx.request.query = query;
           }
+        }
+        if (onHttpRequestStartLine) {
+          await onHttpRequestStartLine(ctx);
+          assert(!signal.aborted);
         }
       },
       onHeader: async (ret) => {
