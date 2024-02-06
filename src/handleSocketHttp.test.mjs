@@ -5,14 +5,32 @@ import handleSocketHttp from './handleSocketHttp.mjs';
 
 test('handleSocketHttp', () => {
   const pass = new PassThrough();
-  const getState = handleSocketHttp({})(pass);
+  const onFinish = mock.fn((state) => {
+    assert.equal(typeof state.dateTimeCreate, 'number');
+    assert.equal(state.bytesRead, 0);
+    assert.equal(state.bytesWritten, 0);
+    assert.equal(state.count, 0);
+  });
+  handleSocketHttp({
+    onFinish,
+  })(pass);
   assert(pass.eventNames().includes('error'));
   assert(pass.eventNames().includes('close'));
   assert(!pass.eventNames().includes('data'));
+  assert.equal(onFinish.mock.calls.length, 0);
   setImmediate(() => {
     assert(pass.eventNames().includes('data'));
-    assert(!getState().signal.aborted);
+    pass.end();
   });
+  setTimeout(() => {
+    assert.equal(onFinish.mock.calls.length, 1);
+    assert(!pass.eventNames().includes('data'));
+    assert(!pass.eventNames().includes('close'));
+    assert(!pass.eventNames().includes('end'));
+  }, 100);
+  setTimeout(() => {
+    assert(!pass.eventNames().includes('error'));
+  }, 500);
 });
 
 test('handleSocketHttp socket close', () => {

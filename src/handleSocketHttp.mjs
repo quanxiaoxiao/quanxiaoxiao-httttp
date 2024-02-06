@@ -20,7 +20,8 @@ export default ({
     signal: controller.signal,
     detached: false,
     count: 0,
-    bytes: 0,
+    bytesRead: 0,
+    bytesWritten: 0,
   };
 
   function doSocketEnd(chunk) {
@@ -84,7 +85,7 @@ export default ({
         socket.destroy();
       }
     } else {
-      state.bytes += chunk.length;
+      state.bytesRead += chunk.length;
       try {
         await state.encode(chunk);
       } catch (error) {
@@ -96,10 +97,13 @@ export default ({
   }
 
   function emitFinish() {
+    assert(state.signal.aborted);
     if (!state.complete && onFinish) {
+      state.complete = true;
       onFinish({
         dateTimeCreate: state.dateTimeCreate,
-        bytes: state.bytes,
+        bytesRead: state.bytesRead,
+        bytesWritten: state.bytesWritten,
         count: state.count,
       });
     }
@@ -108,6 +112,7 @@ export default ({
   function handleSocketEnd() {
     state.isEndEventBind = false;
     unbindError();
+    emitFinish();
   }
 
   function handleCloseOnSocket() {
@@ -118,6 +123,7 @@ export default ({
     if (!controller.signal.aborted) {
       controller.abort();
     }
+    emitFinish();
   }
 
   function handleErrorOnSocket() {
@@ -134,6 +140,7 @@ export default ({
     if (!controller.signal.aborted) {
       controller.abort();
     }
+    emitFinish();
   }
 
   if (!socket.destroyed) {
@@ -149,6 +156,7 @@ export default ({
       }
     });
   } else {
+    controller.abort();
     emitFinish();
   }
 
