@@ -63,13 +63,7 @@ export default ({
         }
         ctx.socket.write(http.encodeHttp(generateResponse(ctx)));
         state.ctx = null;
-        if (onHttpResponseEnd) {
-          try {
-            onHttpResponseEnd(ctx);
-          } catch (error) {
-            console.error(error);
-          }
-        }
+        onHttpResponseEnd(ctx);
       } catch (error) {
         ctx.error = error;
         doResponseError(ctx);
@@ -96,13 +90,7 @@ export default ({
       ctx.socket.write(http.encodeHttp(generateResponse(ctx)));
     }
     state.ctx = null;
-    if (onHttpResponseEnd) {
-      try {
-        onHttpResponseEnd(ctx);
-      } catch (error) {
-        console.error(error);
-      }
-    }
+    onHttpResponseEnd(ctx);
   };
 
   const bindExcute = (ctx) => {

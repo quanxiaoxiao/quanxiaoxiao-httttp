@@ -6,6 +6,7 @@ import { getCurrentDateTime } from './dateTime.mjs';
 
 export default ({
   onFinish,
+  onHttpResponseEnd,
   ...hooks
 }) => (socket) => { // eslint-disable-line consistent-return
   const controller = new AbortController();
@@ -64,6 +65,16 @@ export default ({
         return socket;
       },
       ...hooks,
+      onHttpResponseEnd: (ctx) => {
+        state.count += 1;
+        if (onHttpResponseEnd) {
+          try {
+            onHttpResponseEnd(ctx);
+          } catch (error) {
+            console.error(error);
+          }
+        }
+      },
     });
 
     socket.on('data', handleDataOnSocket);
