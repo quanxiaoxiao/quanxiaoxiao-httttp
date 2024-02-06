@@ -1,17 +1,26 @@
 /* eslint no-use-before-define: 0 */
 import process from 'node:process';
+import assert from 'node:assert';
 import attachRequest from './attachRequest.mjs';
+import { getCurrentDateTime } from './dateTime.mjs';
 
-export default (hooks) => (socket) => { // eslint-disable-line consistent-return
+export default ({
+  onFinish,
+  ...hooks
+}) => (socket) => { // eslint-disable-line consistent-return
   const controller = new AbortController();
 
   const state = {
+    dateTimeCreate: getCurrentDateTime(),
     isEndEventBind: false,
     isErrorEventBind: false,
     isEndEmit: false,
     encode: null,
-    socket,
+    complete: false,
     signal: controller.signal,
+    detached: false,
+    count: 0,
+    bytes: 0,
   };
 
   function doSocketEnd(chunk) {
@@ -39,6 +48,7 @@ export default (hooks) => (socket) => { // eslint-disable-line consistent-return
       signal: controller.signal,
       doSocketEnd,
       detach: () => {
+        assert(!state.detached);
         if (controller.signal.aborted
           || socket.destroyed
           || state.isEndEventBind) {
@@ -47,6 +57,7 @@ export default (hooks) => (socket) => { // eslint-disable-line consistent-return
         socket.off('data', handleDataOnSocket);
         socket.off('close', handleCloseOnSocket);
         socket.off('error', handleErrorOnSocket);
+        state.detached = true;
         return socket;
       },
       ...hooks,
@@ -73,6 +84,7 @@ export default (hooks) => (socket) => { // eslint-disable-line consistent-return
         socket.destroy();
       }
     } else {
+      state.bytes += chunk.length;
       try {
         await state.encode(chunk);
       } catch (error) {
@@ -80,6 +92,16 @@ export default (hooks) => (socket) => { // eslint-disable-line consistent-return
           socket.destroy();
         }
       }
+    }
+  }
+
+  function emitFinish() {
+    if (!state.complete && onFinish) {
+      onFinish({
+        dateTimeCreate: state.dateTimeCreate,
+        bytes: state.bytes,
+        count: state.count,
+      });
     }
   }
 
@@ -126,6 +148,8 @@ export default (hooks) => (socket) => { // eslint-disable-line consistent-return
         bindEncode();
       }
     });
+  } else {
+    emitFinish();
   }
 
   if (process.env.NODE_ENV === 'test') {
