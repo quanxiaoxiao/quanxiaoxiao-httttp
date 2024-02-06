@@ -100,7 +100,10 @@ export default ({
 
   function emitFinish() {
     assert(state.signal.aborted);
-    if (!state.complete && onFinish) {
+    if (!state.complete
+      && onFinish
+      && !state.detached
+    ) {
       state.complete = true;
       onFinish({
         remoteAddress: state.remoteAddress,
