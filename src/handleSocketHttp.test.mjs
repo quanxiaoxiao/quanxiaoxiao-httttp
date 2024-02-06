@@ -104,7 +104,7 @@ test('handleSocketHttp socket onData with invalid http chunk', () => {
     assert.equal(typeof state.dateTimeCreate, 'number');
     assert.equal(state.bytesRead, buf.length);
     assert.equal(state.bytesWritten, 0);
-    assert.equal(state.count, 0);
+    assert.equal(state.count, 1);
   });
   const pass = new PassThrough();
   const onHttpRequestStartLine = mock.fn(() => {});

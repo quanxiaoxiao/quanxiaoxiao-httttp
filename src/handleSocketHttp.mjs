@@ -36,6 +36,7 @@ export default ({
       socket.off('close', handleCloseOnSocket);
       controller.abort();
       if (socket.writable) {
+        state.count += 1;
         state.isEndEventBind = true;
         socket.once('end', handleSocketEnd);
         socket.end(chunk);
