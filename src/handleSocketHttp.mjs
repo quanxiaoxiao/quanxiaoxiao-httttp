@@ -18,7 +18,7 @@ export default ({
     isErrorEventBind: false,
     isEndEmit: false,
     remoteAddress,
-    encode: null,
+    decode: null,
     complete: false,
     signal: controller.signal,
     detached: false,
@@ -48,7 +48,7 @@ export default ({
   }
 
   function bindEncode() {
-    state.encode = attachRequest({
+    state.decode = attachRequest({
       socket,
       signal: controller.signal,
       doSocketEnd,
@@ -101,7 +101,7 @@ export default ({
     } else {
       state.bytesRead += chunk.length;
       try {
-        await state.encode(chunk);
+        await state.decode(chunk);
       } catch (error) {
         if (!socket.destroyed) {
           socket.destroy();

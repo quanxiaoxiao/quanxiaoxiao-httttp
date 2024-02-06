@@ -107,6 +107,12 @@ test('handleSocketHttp socket onData with invalid http chunk', () => {
     assert.equal(state.count, 1);
   });
   const pass = new PassThrough();
+  const _end = pass.end;
+  const end = mock.fn((chunk) => {
+    assert(/^HTTP\/1\.1 400 /.test(chunk.toString()));
+    return _end.call(pass, chunk);
+  });
+  pass.end = end;
   const onHttpRequestStartLine = mock.fn(() => {});
   const onHttpError = mock.fn((ctx) => {
     assert.equal(ctx.error.statusCode, 400);
@@ -136,5 +142,6 @@ test('handleSocketHttp socket onData with invalid http chunk', () => {
     assert.equal(onFinish.mock.calls.length, 1);
     assert.equal(onHttpError.mock.calls.length, 1);
     assert.equal(onHttpRequestStartLine.mock.calls.length, 0);
+    assert.equal(end.mock.calls.length, 1);
   }, 500);
 });
