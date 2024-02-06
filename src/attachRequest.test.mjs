@@ -3,7 +3,7 @@ import { test, mock } from 'node:test';
 import assert from 'node:assert';
 import attachRequest from './attachRequest.mjs';
 
-test('attachRequest init', async () => {
+test('attachRequest', async () => {
   const controller = new AbortController();
   const onHttpRequest = mock.fn((ctx) => {
     assert.equal(typeof ctx.request.dateTimeCreate, 'number');
@@ -42,13 +42,44 @@ test('attachRequest init', async () => {
     );
   });
   const onHttpRequestConnection = mock.fn(() => {});
-  const onHttpRequestEnd = mock.fn(() => {});
+  const onRequestBodyChunk = mock.fn(() => {});
   const onForwardConnecting = mock.fn(() => {});
   const onForwardConnect = mock.fn(() => {});
-  const onHttpResponseEnd = mock.fn(() => {});
+  const onHttpResponseEnd = mock.fn((ctx) => {
+    assert.equal(ctx.response.statusCode, 201);
+    assert.equal(ctx.response.body, 'ok');
+  });
   const onHttpError = mock.fn(() => {});
   const onChunkIncoming = mock.fn(() => {});
   const onChunkOutgoing = mock.fn(() => {});
+  const doSocketEnd = mock.fn(() => {});
+
+  const onHttpRequestEnd = mock.fn((ctx) => {
+    assert(ctx.request.body.readable);
+    assert(ctx.request.body.writable);
+    assert.equal(typeof ctx.request.dateTimeBody, 'number');
+    assert.equal(typeof ctx.request.dateTimeEnd, 'number');
+    assert.equal(ctx.request.connection, false);
+    assert(ctx.request.body.eventNames().includes('end'));
+    assert(ctx.request.body.eventNames().includes('resume'));
+    assert(ctx.request.body.eventNames().includes('pause'));
+    ctx.request.body.on('data', onRequestBodyChunk);
+    ctx.request.body.on('end', () => {
+      assert.equal(
+        Buffer.concat(onRequestBodyChunk.mock.calls.map((d) => d.arguments[0])),
+        'aabb',
+      );
+      assert(!ctx.request.body.eventNames().includes('resume'));
+      assert(!ctx.request.body.eventNames().includes('pause'));
+      ctx.response = {
+        statusCode: 201,
+        headers: {
+          Server: 'quan',
+        },
+        body: 'ok',
+      };
+    });
+  });
 
   const execute = attachRequest({
     signal: controller.signal,
@@ -64,6 +95,7 @@ test('attachRequest init', async () => {
     onHttpError,
     onChunkIncoming,
     onChunkOutgoing,
+    doSocketEnd,
   });
   assert.equal(onHttpRequest.mock.calls.length, 0);
   assert.equal(onHttpRequestStartLine.mock.calls.length, 0);
@@ -110,4 +142,13 @@ test('attachRequest init', async () => {
   assert.equal(onHttpResponseEnd.mock.calls.length, 0);
   assert.equal(onHttpError.mock.calls.length, 0);
   assert.equal(onChunkIncoming.mock.calls.length, 0);
+  await execute(Buffer.from('bb'));
+  assert.equal(onHttpRequestEnd.mock.calls.length, 1);
+  setImmediate(() => {
+    assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+    assert.equal(onRequestBodyChunk.mock.calls.length, 2);
+    assert.equal(onForwardConnecting.mock.calls.length, 0);
+    assert.equal(onForwardConnect.mock.calls.length, 0);
+    assert.equal(onHttpError.mock.calls.length, 0);
+  });
 });

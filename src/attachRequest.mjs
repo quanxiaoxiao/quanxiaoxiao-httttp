@@ -1,5 +1,6 @@
 /* eslint no-use-before-define: 0 */
 import { Buffer } from 'node:buffer';
+import process from 'node:process';
 import qs from 'node:querystring';
 import assert from 'node:assert';
 import { PassThrough } from 'node:stream';
@@ -183,7 +184,9 @@ export default ({
             } else {
               ctx.request.body.once('end', () => {
                 throttle();
-                doResponse(ctx);
+                process.nextTick(() => {
+                  doResponse(ctx);
+                });
               });
             }
           }
