@@ -1,11 +1,9 @@
 import { Buffer } from 'node:buffer';
 import assert from 'node:assert';
 import { PassThrough, Transform } from 'node:stream';
-import {
-  http,
-  getCurrentDateTime,
-} from '@quanxiaoxiao/about-net';
+import { http } from '@quanxiaoxiao/about-net';
 import getSocketConnection from './getSocketConnection.mjs';
+import { getCurrentDateTime } from './dateTime.mjs';
 
 export default async ({
   ctx,

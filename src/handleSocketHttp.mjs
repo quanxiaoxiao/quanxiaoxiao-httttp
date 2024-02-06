@@ -14,6 +14,25 @@ export default (hooks) => (socket) => { // eslint-disable-line consistent-return
     signal: controller.signal,
   };
 
+  function doSocketEnd(chunk) {
+    if (!controller.signal.aborted
+      && !state.isEndEmit
+      && !socket.destroyed) {
+      state.isEndEmit = true;
+      socket.off('data', handleDataOnSocket);
+      socket.off('close', handleCloseOnSocket);
+      controller.abort();
+      if (socket.writable) {
+        state.isEndEventBind = true;
+        socket.once('end', handleSocketEnd);
+        socket.end(chunk);
+      } else {
+        socket.destroy();
+        unbindError();
+      }
+    }
+  }
+
   function bindEncode() {
     state.encode = attachRequest({
       socket,
@@ -34,25 +53,6 @@ export default (hooks) => (socket) => { // eslint-disable-line consistent-return
     });
 
     socket.on('data', handleDataOnSocket);
-  }
-
-  function doSocketEnd(chunk) {
-    if (!controller.signal.aborted
-      && !state.isEndEmit
-      && !socket.destroyed) {
-      state.isEndEmit = true;
-      socket.off('data', handleDataOnSocket);
-      socket.off('close', handleCloseOnSocket);
-      controller.abort();
-      if (socket.writable) {
-        state.isEndEventBind = true;
-        socket.once('end', handleSocketEnd);
-        socket.end(chunk);
-      } else {
-        socket.destroy();
-        unbindError();
-      }
-    }
   }
 
   function unbindError() {

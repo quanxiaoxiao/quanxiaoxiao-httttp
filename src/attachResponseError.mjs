@@ -1,16 +1,14 @@
 import assert from 'node:assert';
 import { STATUS_CODES } from 'node:http';
-import {
-  getCurrentDateTime,
-  errors,
-} from '@quanxiaoxiao/about-net';
+import { errors } from '@quanxiaoxiao/about-net';
+import { getCurrentDateName } from './dateTime.mjs';
 
 export default (ctx) => {
   assert(ctx.error);
   ctx.response = {
     statusCode: ctx.error.statusCode,
     headers: {
-      Date: new Date(getCurrentDateTime() + 1000 * 60 * 60 * 8).toUTCString(),
+      Date: getCurrentDateName(),
     },
     body: null,
   };

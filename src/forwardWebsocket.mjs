@@ -2,11 +2,11 @@ import assert from 'node:assert';
 import {
   http,
   pipeSocketForward,
-  getCurrentDateTime,
 } from '@quanxiaoxiao/about-net';
 import createError from 'http-errors';
 import getSocketConnection from './getSocketConnection.mjs';
 import attachResponseError from './attachResponseError.mjs';
+import { getCurrentDateTime } from './dateTime.mjs';
 
 export default async ({
   ctx,

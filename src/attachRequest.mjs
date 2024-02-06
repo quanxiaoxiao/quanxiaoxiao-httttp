@@ -4,14 +4,12 @@ import qs from 'node:querystring';
 import assert from 'node:assert';
 import { PassThrough } from 'node:stream';
 import createError from 'http-errors';
-import {
-  http,
-  getCurrentDateTime,
-} from '@quanxiaoxiao/about-net';
+import { http } from '@quanxiaoxiao/about-net';
 import forwardRequest from './forwardRequest.mjs';
 import forwardWebsocket from './forwardWebsocket.mjs';
 import attachResponseError from './attachResponseError.mjs';
 import generateResponse from './generateResponse.mjs';
+import { getCurrentDateTime } from './dateTime.mjs';
 
 export default ({
   signal,

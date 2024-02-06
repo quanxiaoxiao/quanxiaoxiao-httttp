@@ -1,9 +1,7 @@
 import { STATUS_CODES } from 'node:http';
 import createError from 'http-errors';
-import {
-  http,
-  getCurrentDateTime,
-} from '@quanxiaoxiao/about-net';
+import { http } from '@quanxiaoxiao/about-net';
+import { getCurrentDateName } from './dateTime.mjs';
 
 export default (ctx) => {
   if (!ctx.response) {
@@ -31,7 +29,7 @@ export default (ctx) => {
     response.body = JSON.stringify(ctx.response.data);
   }
   response.headers = http.setHeaders(response.headers, {
-    Date: new Date(getCurrentDateTime() + 1000 * 60 * 60 * 8).toUTCString(),
+    Date: getCurrentDateName(),
   });
   return response;
 };
