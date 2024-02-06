@@ -77,17 +77,24 @@ test('handleSocketHttp destroyed socket after handler', () => {
 });
 
 test('handleSocketHttp socket emit error', () => {
+  const onFinish = mock.fn((state) => {
+    assert.equal(typeof state.dateTimeCreate, 'number');
+    assert.equal(state.bytesRead, 0);
+    assert.equal(state.bytesWritten, 0);
+    assert.equal(state.count, 0);
+  });
   const pass = new PassThrough();
-  const getState = handleSocketHttp({})(pass);
+  handleSocketHttp({
+    onFinish,
+  })(pass);
   setTimeout(() => {
     assert(pass.eventNames().includes('error'));
-    assert(getState().isErrorEventBind);
+    assert.equal(onFinish.mock.calls.length, 0);
     pass.emit('error', new Error('error'));
     assert(!pass.eventNames().includes('error'));
     assert(!pass.eventNames().includes('data'));
     assert(!pass.eventNames().includes('close'));
-    assert(getState().signal.aborted);
-    assert(!getState().isErrorEventBind);
+    assert.equal(onFinish.mock.calls.length, 1);
   }, 100);
 });
 
@@ -95,18 +102,23 @@ test('handleSocketHttp socket onData with invalid http chunk', () => {
   const pass = new PassThrough();
   const onHttpError = mock.fn(() => {});
   const onHttpRequestStartLine = mock.fn(() => {});
+  const buf = Buffer.from('GET /test HTTP/1.1\n\n');
+  const onFinish = mock.fn((state) => {
+    assert.equal(typeof state.dateTimeCreate, 'number');
+    assert.equal(state.bytesRead, buf.length);
+    assert.equal(state.bytesWritten, 0);
+    assert.equal(state.count, 0);
+  });
 
-  const getState = handleSocketHttp({
+  handleSocketHttp({
     onHttpError,
     onHttpRequestStartLine,
+    onFinish,
   })(pass);
 
   setTimeout(() => {
-    pass.write(Buffer.from('GET /test HTTP/1.1\n\n'));
+    pass.write(Buffer.from(buf));
     setImmediate(() => {
-      assert(getState().isEndEmit);
-      assert(getState().signal.aborted);
-      assert(getState().isErrorEventBind);
       assert(!pass.eventNames().includes('data'));
       assert(!pass.eventNames().includes('close'));
     });
@@ -114,12 +126,10 @@ test('handleSocketHttp socket onData with invalid http chunk', () => {
 
   setTimeout(() => {
     assert(pass.destroyed);
-    assert(getState().signal.aborted);
     assert(!pass.eventNames().includes('error'));
     assert(!pass.eventNames().includes('data'));
     assert(!pass.eventNames().includes('close'));
     assert(!pass.eventNames().includes('end'));
-    assert(!getState().isErrorEventBind);
     assert.equal(onHttpError.mock.calls.length, 1);
     assert.equal(onHttpError.mock.calls[0].arguments[0].error.statusCode, 400);
     assert.equal(onHttpRequestStartLine.mock.calls.length, 0);

@@ -9,12 +9,14 @@ export default ({
   ...hooks
 }) => (socket) => { // eslint-disable-line consistent-return
   const controller = new AbortController();
+  const { remoteAddress } = socket;
 
   const state = {
     dateTimeCreate: getCurrentDateTime(),
     isEndEventBind: false,
     isErrorEventBind: false,
     isEndEmit: false,
+    remoteAddress,
     encode: null,
     complete: false,
     signal: controller.signal,
@@ -101,6 +103,7 @@ export default ({
     if (!state.complete && onFinish) {
       state.complete = true;
       onFinish({
+        remoteAddress: state.remoteAddress,
         dateTimeCreate: state.dateTimeCreate,
         bytesRead: state.bytesRead,
         bytesWritten: state.bytesWritten,
@@ -158,9 +161,5 @@ export default ({
   } else {
     controller.abort();
     emitFinish();
-  }
-
-  if (process.env.NODE_ENV === 'test') {
-    return () => state;
   }
 };
