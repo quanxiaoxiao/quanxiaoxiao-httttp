@@ -224,14 +224,17 @@ test('attachRequest onStartLine error', async () => {
   const controller = new AbortController();
   const doSocketEnd = mock.fn(() => {});
   const onHttpError = mock.fn((ctx) => {
-    assert.equal(ctx.response.statusCode, 500);
+    assert.equal(ctx.response.statusCode, 508);
+  });
+  const onHttpRequestStartLine = mock.fn(() => {
+    const error = new Error();
+    error.statusCode = 508;
+    throw error;
   });
   const execute = attachRequest({
     signal: controller.signal,
     socket: new PassThrough(),
-    onHttpRequestStartLine: async () => {
-      throw new Error();
-    },
+    onHttpRequestStartLine,
     onHttpError,
     doSocketEnd,
   });
@@ -239,6 +242,7 @@ test('attachRequest onStartLine error', async () => {
   setTimeout(() => {
     assert.equal(doSocketEnd.mock.calls.length, 1);
     assert.equal(onHttpError.mock.calls.length, 1);
+    assert.equal(onHttpRequestStartLine.mock.calls.length, 1);
   }, 200);
 });
 
@@ -246,13 +250,14 @@ test('attachRequest onStartLine abort', async () => {
   const controller = new AbortController();
   const doSocketEnd = mock.fn(() => {});
   const onHttpError = mock.fn(() => {});
+  const onHttpRequestStartLine = mock.fn(async () => {
+    await waitFor(100);
+    controller.abort();
+  });
   const execute = attachRequest({
     signal: controller.signal,
     socket: new PassThrough(),
-    onHttpRequestStartLine: async () => {
-      await waitFor(100);
-      controller.abort();
-    },
+    onHttpRequestStartLine,
     onHttpError,
     doSocketEnd,
   });
@@ -260,5 +265,37 @@ test('attachRequest onStartLine abort', async () => {
   setTimeout(() => {
     assert.equal(doSocketEnd.mock.calls.length, 0);
     assert.equal(onHttpError.mock.calls.length, 0);
+    assert.equal(onHttpRequestStartLine.mock.calls.length, 1);
+  }, 200);
+});
+
+test('attachRequest onHeader error', async () => {
+  const controller = new AbortController();
+  const doSocketEnd = mock.fn(() => {});
+  const onHttpError = mock.fn((ctx) => {
+    assert.equal(ctx.response.statusCode, 509);
+  });
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    assert.deepEqual(ctx.request.headers, {
+      'content-length': 0,
+      'user-agent': 'quan',
+    });
+    const error = new Error();
+    error.statusCode = 509;
+    throw error;
+  });
+
+  const execute = attachRequest({
+    signal: controller.signal,
+    socket: new PassThrough(),
+    onHttpRequestHeader,
+    onHttpError,
+    doSocketEnd,
+  });
+  await execute(Buffer.from('GET /quan HTTP/1.1\r\nContent-Length: 0\r\nUser-Agent: quan\r\n\r\n'));
+  setTimeout(() => {
+    assert.equal(doSocketEnd.mock.calls.length, 1);
+    assert.equal(onHttpError.mock.calls.length, 1);
+    assert.equal(onHttpRequestHeader.mock.calls.length, 1);
   }, 200);
 });
