@@ -141,7 +141,9 @@ export default async ({
         onClose: () => {
           ctx.response.dateTimeEnd = getCurrentDateTime();
           if (state.isResponsed) {
-            onHttpResponseEnd(ctx);
+            if (onHttpResponseEnd) {
+              onHttpResponseEnd(ctx);
+            }
           } else {
             ctx.error = createError(503);
             if (onHttpError) {

@@ -220,7 +220,7 @@ test('attachRequest onHttpRequest abort', async () => {
   }
 });
 
-test('attachRequest onStartLine error', async () => {
+test('attachRequest onHttpRequestStartLine error', async () => {
   const controller = new AbortController();
   const doSocketEnd = mock.fn(() => {});
   const onHttpError = mock.fn((ctx) => {
@@ -246,7 +246,7 @@ test('attachRequest onStartLine error', async () => {
   }, 200);
 });
 
-test('attachRequest onStartLine abort', async () => {
+test('attachRequest onHttpRequestStartLine abort', async () => {
   const controller = new AbortController();
   const doSocketEnd = mock.fn(() => {});
   const onHttpError = mock.fn(() => {});
@@ -269,7 +269,7 @@ test('attachRequest onStartLine abort', async () => {
   }, 200);
 });
 
-test('attachRequest onHeader error', async () => {
+test('attachRequest onHttpRequestHeader error', async () => {
   const controller = new AbortController();
   const doSocketEnd = mock.fn(() => {});
   const onHttpError = mock.fn((ctx) => {
@@ -300,7 +300,7 @@ test('attachRequest onHeader error', async () => {
   }, 200);
 });
 
-test('attachRequest onHeader aborted', async () => {
+test('attachRequest onHttpRequestHeader aborted', async () => {
   const controller = new AbortController();
   const doSocketEnd = mock.fn(() => {});
   const onHttpError = mock.fn(() => {});
@@ -321,5 +321,146 @@ test('attachRequest onHeader aborted', async () => {
     assert.equal(doSocketEnd.mock.calls.length, 0);
     assert.equal(onHttpError.mock.calls.length, 0);
     assert.equal(onHttpRequestHeader.mock.calls.length, 1);
+  }, 200);
+});
+
+test('attachRequest onHttpRequestEnd error', async () => {
+  const controller = new AbortController();
+  const doSocketEnd = mock.fn(() => {});
+  const onHttpError = mock.fn((ctx) => {
+    assert.deepEqual(ctx.request.headers, {
+      'content-length': 2,
+      'user-agent': 'quan',
+    });
+    assert.equal(ctx.response.statusCode, 511);
+    setImmediate(() => {
+      assert(ctx.request.body.destroyed);
+    });
+  });
+  const onHttpRequestEnd = mock.fn(() => {
+    const error = new Error();
+    error.statusCode = 511;
+    throw error;
+  });
+
+  const execute = attachRequest({
+    signal: controller.signal,
+    socket: new PassThrough(),
+    onHttpRequestEnd,
+    onHttpError,
+    doSocketEnd,
+  });
+  await execute(Buffer.from('GET /quan HTTP/1.1\r\nContent-Length: 2\r\nUser-Agent: quan\r\n\r\naa'));
+  setTimeout(() => {
+    assert.equal(doSocketEnd.mock.calls.length, 1);
+    assert.equal(onHttpError.mock.calls.length, 1);
+    assert.equal(onHttpRequestEnd.mock.calls.length, 1);
+  }, 200);
+});
+
+test('attachRequest wait for consume request body chunk', async () => {
+  const controller = new AbortController();
+  const doSocketEnd = mock.fn(() => {});
+  const onHttpError = mock.fn((ctx) => {
+    assert(ctx.request.body.destroyed);
+  });
+  const onRequestBodyChunk = mock.fn(() => {});
+  const onHttpRequestEnd = mock.fn((ctx) => {
+    assert.equal(ctx.request.headers['content-length'], 4);
+    assert(ctx.request.body instanceof PassThrough);
+    assert(ctx.request.body.eventNames().includes('pause'));
+    assert(ctx.request.body.eventNames().includes('resume'));
+    assert(!ctx.request.body.writableEnded);
+    setTimeout(() => {
+      assert(ctx.request.body.writableEnded);
+    }, 200);
+    setTimeout(() => {
+      ctx.request.body.on('data', onRequestBodyChunk);
+    }, 300);
+  });
+
+  const execute = attachRequest({
+    signal: controller.signal,
+    socket: new PassThrough(),
+    onHttpError,
+    doSocketEnd,
+    onHttpRequestEnd,
+  });
+  await execute(Buffer.from('GET /quan HTTP/1.1\r\nContent-Length: 4\r\nUser-Agent: quan\r\n\r\naa'));
+  setTimeout(async () => {
+    await execute(Buffer.from('cc'));
+  }, 100);
+  setTimeout(() => {
+    assert.equal(doSocketEnd.mock.calls.length, 0);
+    assert.equal(onHttpError.mock.calls.length, 0);
+    assert.equal(onHttpRequestEnd.mock.calls.length, 1);
+  }, 200);
+  setTimeout(() => {
+    assert.equal(onRequestBodyChunk.mock.calls.length, 2);
+    assert.equal(onHttpError.mock.calls.length, 1);
+  }, 500);
+});
+
+test('attachRequest onResponse with no response', async () => {
+  const controller = new AbortController();
+  const doSocketEnd = mock.fn(() => {});
+  const onRequest = mock.fn((ctx) => {
+    assert.equal(ctx.request.body.toString(), 'aacc');
+    assert.equal(ctx.response, null);
+  });
+
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    ctx.onRequest = onRequest;
+  });
+  const onHttpError = mock.fn(() => {});
+
+  const execute = attachRequest({
+    signal: controller.signal,
+    socket: new PassThrough(),
+    doSocketEnd,
+    onHttpRequestHeader,
+    onHttpError,
+  });
+  await execute(Buffer.from('GET /quan HTTP/1.1\r\nContent-Length: 4\r\nUser-Agent: quan\r\n\r\naa'));
+  setTimeout(async () => {
+    await execute(Buffer.from('cc'));
+  }, 100);
+
+  setTimeout(() => {
+    assert.equal(onRequest.mock.calls.length, 1);
+    assert.equal(doSocketEnd.mock.calls.length, 1);
+  }, 200);
+});
+
+test('attachRequest onResponse with response', async () => {
+  const controller = new AbortController();
+  const doSocketEnd = mock.fn(() => {});
+  const onRequest = mock.fn((ctx) => {
+    assert.equal(ctx.request.body.toString(), 'aabb');
+    ctx.response = {
+      headers: {
+        server: 'quan',
+      },
+      body: 'aaa',
+    };
+  });
+
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    ctx.onRequest = onRequest;
+  });
+  const onHttpError = mock.fn(() => {});
+
+  const execute = attachRequest({
+    signal: controller.signal,
+    socket: new PassThrough(),
+    doSocketEnd,
+    onHttpRequestHeader,
+    onHttpError,
+  });
+  await execute(Buffer.from('GET /quan HTTP/1.1\r\nContent-Length: 4\r\nUser-Agent: quan\r\n\r\naabb'));
+
+  setTimeout(() => {
+    assert.equal(onRequest.mock.calls.length, 1);
+    assert.equal(onHttpError.mock.calls.length, 0);
   }, 200);
 });

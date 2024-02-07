@@ -64,7 +64,9 @@ export default ({
         }
         ctx.socket.write(http.encodeHttp(generateResponse(ctx)));
         state.ctx = null;
-        onHttpResponseEnd(ctx);
+        if (onHttpResponseEnd) {
+          onHttpResponseEnd(ctx);
+        }
       } catch (error) {
         ctx.error = error;
         doResponseError(ctx);
@@ -91,7 +93,9 @@ export default ({
       ctx.socket.write(http.encodeHttp(generateResponse(ctx)));
     }
     state.ctx = null;
-    onHttpResponseEnd(ctx);
+    if (onHttpResponseEnd) {
+      onHttpResponseEnd(ctx);
+    }
   };
 
   const bindExcute = (ctx) => {
@@ -308,6 +312,12 @@ export default ({
               socket.destroy();
             }
           }
+        }
+        if (state.ctx
+           && state.ctx.request.body
+           && state.ctx.request.body.pipe
+           && !state.ctx.request.body.destroyed) {
+          state.ctx.request.body.destroy();
         }
       }
     }
