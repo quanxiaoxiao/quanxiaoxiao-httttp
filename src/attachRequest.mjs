@@ -259,6 +259,7 @@ export default ({
 
   return async (chunk) => {
     assert(!signal.aborted);
+
     if (!state.ctx) {
       state.ctx = {
         socket,
@@ -289,21 +290,23 @@ export default ({
       bindExcute(state.ctx);
     }
 
-    if (onChunkOutgoing) {
-      onChunkOutgoing(state.ctx, chunk);
-    }
+    if (chunk && chunk.length > 0) {
+      if (onChunkOutgoing) {
+        onChunkOutgoing(state.ctx, chunk);
+      }
 
-    try {
-      await state.execute(chunk);
-    } catch (error) {
-      if (!signal.aborted) {
-        if (state.ctx) {
-          state.ctx.error = error;
-          doResponseError(state.ctx);
-        } else {
-          console.error(error);
-          if (!socket.destroyed) {
-            socket.destroy();
+      try {
+        await state.execute(chunk);
+      } catch (error) {
+        if (!signal.aborted) {
+          if (state.ctx) {
+            state.ctx.error = error;
+            doResponseError(state.ctx);
+          } else {
+            console.error(error);
+            if (!socket.destroyed) {
+              socket.destroy();
+            }
           }
         }
       }

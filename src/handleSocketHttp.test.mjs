@@ -145,3 +145,29 @@ test('handleSocketHttp socket onData with invalid http chunk', () => {
     assert.equal(end.mock.calls.length, 1);
   }, 500);
 });
+
+test('handleSocketHttp onHttpRequest error', () => {
+  const onFinish = mock.fn((state) => {
+    assert.equal(typeof state.dateTimeCreate, 'number');
+    assert.equal(state.bytesRead, Buffer.byteLength('GET /aaa HT'));
+    assert.equal(state.count, 0);
+  });
+  const pass = new PassThrough();
+  handleSocketHttp({
+    onFinish,
+    onHttpRequest: () => {
+      throw new Error();
+    },
+  })(pass);
+  setTimeout(() => {
+    pass.write(Buffer.from('GET /aaa HT'));
+  }, 100);
+  setTimeout(() => {
+    assert(!pass.eventNames().includes('error'));
+    assert(!pass.eventNames().includes('data'));
+    assert(!pass.eventNames().includes('close'));
+    assert(!pass.eventNames().includes('end'));
+    assert.equal(onFinish.mock.calls.length, 1);
+    assert(pass.destroyed);
+  }, 500);
+});
