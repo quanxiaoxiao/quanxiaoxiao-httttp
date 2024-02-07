@@ -299,3 +299,27 @@ test('attachRequest onHeader error', async () => {
     assert.equal(onHttpRequestHeader.mock.calls.length, 1);
   }, 200);
 });
+
+test('attachRequest onHeader aborted', async () => {
+  const controller = new AbortController();
+  const doSocketEnd = mock.fn(() => {});
+  const onHttpError = mock.fn(() => {});
+  const onHttpRequestHeader = mock.fn(async () => {
+    await waitFor(100);
+    controller.abort();
+  });
+
+  const execute = attachRequest({
+    signal: controller.signal,
+    socket: new PassThrough(),
+    onHttpRequestHeader,
+    onHttpError,
+    doSocketEnd,
+  });
+  await execute(Buffer.from('GET /quan HTTP/1.1\r\nContent-Length: 0\r\nUser-Agent: quan\r\n\r\n'));
+  setTimeout(() => {
+    assert.equal(doSocketEnd.mock.calls.length, 0);
+    assert.equal(onHttpError.mock.calls.length, 0);
+    assert.equal(onHttpRequestHeader.mock.calls.length, 1);
+  }, 200);
+});
