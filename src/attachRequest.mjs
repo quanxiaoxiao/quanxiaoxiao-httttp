@@ -252,10 +252,11 @@ export default ({
   function handleAbortOnSignal() {
     if (state.ctx
       && state.ctx.request
-      && state.ctx.request.write
-      && !state.ctx.request.destroyed
+      && state.ctx.request.body
+      && state.ctx.request.body.pipe
+      && !state.ctx.request.body.destroyed
     ) {
-      state.ctx.request.destroy();
+      state.ctx.request.body.destroy();
     }
   }
 
