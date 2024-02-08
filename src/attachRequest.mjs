@@ -43,11 +43,7 @@ export default ({
       state.isErrorEmit = true;
       attachResponseError(ctx);
       if (onHttpError) {
-        try {
-          onHttpError(ctx);
-        } catch (error) {
-          console.error(error);
-        }
+        onHttpError(ctx);
       } else {
         console.error(ctx.error);
       }

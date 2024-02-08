@@ -557,6 +557,75 @@ test('attachRequest request by nobody', async () => {
   setTimeout(() => {
     assert.equal(onHttpRequestEnd.mock.calls.length, 1);
     assert.equal(onHttpError.mock.calls.length, 0);
+    assert.equal(doSocketEnd.mock.calls.length, 0);
     assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+  }, 200);
+});
+
+test('attachRequest onResponse', async () => {
+  const controller = new AbortController();
+  const doSocketEnd = mock.fn(() => {});
+  const onHttpError = mock.fn(() => {});
+  const onResponse = mock.fn((ctx) => {
+    assert.equal(ctx.response, null);
+    ctx.response = {
+      headers: {},
+      body: 'xxx',
+    };
+  });
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    ctx.onResponse = onResponse;
+  });
+  const onHttpResponseEnd = mock.fn((ctx) => {
+    assert.equal(ctx.response.body, 'xxx');
+  });
+
+  const execute = attachRequest({
+    signal: controller.signal,
+    socket: new PassThrough(),
+    doSocketEnd,
+    onHttpError,
+    onHttpRequestHeader,
+    onHttpResponseEnd,
+  });
+
+  await execute(Buffer.from('GET /quan HTTP/1.1\r\nContent-Length: 0\r\nUser-Agent: quan\r\n\r\n'));
+
+  setTimeout(() => {
+    assert.equal(onHttpError.mock.calls.length, 0);
+    assert.equal(doSocketEnd.mock.calls.length, 0);
+    assert.equal(onResponse.mock.calls.length, 1);
+    assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+  }, 200);
+});
+
+test('attachRequest onResponse with abort', async () => {
+  const controller = new AbortController();
+  const doSocketEnd = mock.fn(() => {});
+  const onHttpError = mock.fn(() => {});
+  const onResponse = mock.fn(async () => {
+    controller.abort();
+  });
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    ctx.onResponse = onResponse;
+  });
+  const onHttpResponseEnd = mock.fn(() => {});
+
+  const execute = attachRequest({
+    signal: controller.signal,
+    socket: new PassThrough(),
+    doSocketEnd,
+    onHttpError,
+    onHttpRequestHeader,
+    onHttpResponseEnd,
+  });
+
+  await execute(Buffer.from('GET /quan HTTP/1.1\r\nContent-Length: 0\r\nUser-Agent: quan\r\n\r\n'));
+
+  setTimeout(() => {
+    assert.equal(onHttpError.mock.calls.length, 0);
+    assert.equal(doSocketEnd.mock.calls.length, 0);
+    assert.equal(onResponse.mock.calls.length, 1);
+    assert.equal(onHttpResponseEnd.mock.calls.length, 0);
   }, 200);
 });
