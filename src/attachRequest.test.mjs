@@ -1,4 +1,5 @@
 import { PassThrough } from 'node:stream';
+import net from 'node:net';
 import { test, mock } from 'node:test';
 import assert from 'node:assert';
 import attachRequest from './attachRequest.mjs';
@@ -10,6 +11,17 @@ const waitFor = async (t = 100) => {
     }, t);
   });
 };
+
+const _getPort = () => {
+  let _port = 5750;
+  return () => {
+    const port = _port;
+    _port += 1;
+    return port;
+  };
+};
+
+const getPort = _getPort();
 
 test('attachRequest', async () => {
   const controller = new AbortController();
@@ -669,4 +681,158 @@ test('attachRequest forward unable connect', async () => {
     assert.equal(onHttpResponseEnd.mock.calls.length, 0);
     assert.equal(onForwardConnecting.mock.calls.length, 1);
   }, 200);
+});
+
+test('attachRequest forward by server close', async () => {
+  const port = getPort();
+  const controller = new AbortController();
+  const server = net.createServer((socket) => {
+    socket.on('data', (chunk) => {
+      assert.equal(chunk.toString(), 'GET /quan HTTP/1.1\r\nUser-Agent: quan\r\nContent-Length: 0\r\n\r\n');
+    });
+    setTimeout(() => {
+      socket.destroy();
+    }, 100);
+  });
+  server.listen(port);
+
+  const doSocketEnd = mock.fn(() => {});
+  const onHttpError = mock.fn((ctx) => {
+    assert.equal(ctx.response.statusCode, 502);
+    assert.equal(typeof ctx.requestForward.dateTimeConnect, 'number');
+  });
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    assert.equal(ctx.requestForward, null);
+    ctx.requestForward = {
+      port,
+      hostname: '127.0.0.1',
+    };
+  });
+
+  const onForwardConnect = mock.fn((ctx) => {
+    assert.equal(typeof ctx.requestForward.dateTimeConnect, 'number');
+  });
+
+  const onHttpResponseEnd = mock.fn(() => {});
+
+  const execute = attachRequest({
+    signal: controller.signal,
+    socket: new PassThrough(),
+    doSocketEnd,
+    onHttpError,
+    onHttpRequestHeader,
+    onHttpResponseEnd,
+    onForwardConnect,
+  });
+
+  await execute(Buffer.from('GET /quan HTTP/1.1\r\nContent-Length: 0\r\nUser-Agent: quan\r\n\r\n'));
+
+  await waitFor(500);
+
+  assert.equal(onForwardConnect.mock.calls.length, 1);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 0);
+  assert.equal(onHttpError.mock.calls.length, 1);
+
+  server.close();
+});
+
+test('attachRequest forward', async () => {
+  const port = getPort();
+  const controller = new AbortController();
+  const server = net.createServer((socket) => {
+    socket.on('data', () => {
+      socket.end('HTTP/1.1 200 OK\r\nContent-Length: 2\r\nServer: quan\r\n\r\nee');
+    });
+  });
+  server.listen(port);
+
+  const doSocketEnd = mock.fn(() => {});
+  const onHttpError = mock.fn(() => {});
+  const handleDataOnSocket = mock.fn(() => {});
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    assert.equal(ctx.requestForward, null);
+    ctx.requestForward = {
+      port,
+      hostname: '127.0.0.1',
+    };
+  });
+
+  const onHttpResponseEnd = mock.fn((ctx) => {
+    assert.equal(ctx.response.statusCode, 200);
+    assert.equal(ctx.response.body, null);
+  });
+
+  const pass = new PassThrough();
+
+  pass.on('data', handleDataOnSocket);
+
+  const execute = attachRequest({
+    signal: controller.signal,
+    socket: pass,
+    doSocketEnd,
+    onHttpError,
+    onHttpRequestHeader,
+    onHttpResponseEnd,
+  });
+
+  await execute(Buffer.from('GET /quan HTTP/1.1\r\nContent-Length: 0\r\nUser-Agent: quan\r\n\r\n'));
+
+  await waitFor(500);
+
+  assert.equal(onHttpError.mock.calls.length, 0);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+  const buf = Buffer.concat(handleDataOnSocket.mock.calls.map((d) => d.arguments[0]));
+  assert.equal(buf.toString(), 'HTTP/1.1 200 OK\r\nserver: quan\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nee\r\n0\r\n\r\n');
+  server.close();
+});
+
+test('attachRequest forward onResponse', async () => {
+  const port = getPort();
+  const controller = new AbortController();
+  const server = net.createServer((socket) => {
+    socket.on('data', () => {
+      socket.end('HTTP/1.1 200 OK\r\nContent-Length: 2\r\nServer: quan\r\n\r\nee');
+    });
+  });
+  server.listen(port);
+
+  const doSocketEnd = mock.fn(() => {});
+  const onHttpError = mock.fn(() => {});
+  const onResponse = mock.fn((ctx) => {
+    assert.equal(ctx.response.statusCode, 200);
+    ctx.response.statusCode = 201;
+    assert.equal(ctx.response.body, 'ee');
+  });
+
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    assert.equal(ctx.requestForward, null);
+    ctx.requestForward = {
+      port,
+      hostname: '127.0.0.1',
+    };
+    ctx.onResponse = onResponse;
+  });
+
+  const onHttpResponseEnd = mock.fn((ctx) => {
+    assert.equal(ctx.response.statusCode, 201);
+  });
+
+  const execute = attachRequest({
+    signal: controller.signal,
+    socket: new PassThrough(),
+    doSocketEnd,
+    onHttpError,
+    onHttpRequestHeader,
+    onHttpResponseEnd,
+  });
+
+  await execute(Buffer.from('GET /quan HTTP/1.1\r\nContent-Length: 0\r\nUser-Agent: quan\r\n\r\n'));
+
+  await waitFor(500);
+
+  assert.equal(onHttpError.mock.calls.length, 0);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+  assert.equal(onResponse.mock.calls.length, 1);
+
+  server.close();
 });
