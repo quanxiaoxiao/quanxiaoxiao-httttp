@@ -145,8 +145,9 @@ export default async ({
               onHttpResponseEnd(ctx);
             }
           } else {
-            ctx.error = createError(503);
+            ctx.error = createError(502);
             if (onHttpError) {
+              attachResponseError(ctx);
               onHttpError(ctx);
             }
           }
@@ -154,6 +155,7 @@ export default async ({
         onError: (error) => {
           ctx.error = error;
           if (!state.isResponsed && onHttpError) {
+            attachResponseError(ctx);
             onHttpError(ctx);
           }
         },
