@@ -998,28 +998,35 @@ test('attachRequest forward onRequest', async () => {
   const port = getPort();
   const controller = new AbortController();
   const server = net.createServer((socket) => {
-    socket.write('HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK');
+    socket.on('data', () => {
+      socket.write('HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK');
+    });
   });
   server.listen(port);
   const doSocketEnd = mock.fn(() => {});
   const onHttpError = mock.fn(() => {});
   const onRequest = mock.fn((ctx) => {
-    ctx.response = {
-      headers: {
-        server: 'quan',
-      },
-      body: 'ok',
-    };
-  });
-  const onHttpRequestHeader = mock.fn((ctx) => {
-    ctx.onRequest = onRequest;
     ctx.requestForward = {
       port,
       hostname: '127.0.0.1',
     };
+    assert.equal(ctx.request.body.toString(), 'quan');
   });
-  const onHttpResponseEnd = mock.fn(() => {});
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    ctx.onRequest = onRequest;
+  });
+  const onHttpResponseEnd = mock.fn((ctx) => {
+    assert.equal(ctx.response.statusCode, 200);
+    assert.equal(ctx.response.body, null);
+    setTimeout(() => {
+      assert(ctx.requestForward.onBody.destroyed);
+    });
+  });
   const socket = new PassThrough();
+
+  const _write = socket.write;
+  const socketWriteFn = mock.fn((chunk) => _write.call(socket, chunk));
+  socket.write = socketWriteFn;
 
   const execute = attachRequest({
     signal: controller.signal,
@@ -1038,5 +1045,89 @@ test('attachRequest forward onRequest', async () => {
   assert.equal(onRequest.mock.calls.length, 1);
   assert.equal(onHttpRequestHeader.mock.calls.length, 1);
   assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+  assert.equal(Buffer.concat(socketWriteFn.mock.calls.map((d) => d.arguments[0])).toString(), 'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nOK\r\n0\r\n\r\n');
+  console.log();
   server.close();
+});
+
+test('attachRequest forward with no onRequest', async () => {
+  const port = getPort();
+  const controller = new AbortController();
+  const server = net.createServer((socket) => {
+    socket.on('data', () => {
+      socket.write('HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK');
+    });
+  });
+  server.listen(port);
+  const doSocketEnd = mock.fn(() => {});
+  const onHttpError = mock.fn(() => {});
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    ctx.requestForward = {
+      port,
+      hostname: '127.0.0.1',
+    };
+  });
+  const onHttpResponseEnd = mock.fn((ctx) => {
+    assert.equal(ctx.response.statusCode, 200);
+    assert.equal(ctx.response.body, null);
+    setTimeout(() => {
+      assert(ctx.requestForward.onBody.destroyed);
+    });
+  });
+  const socket = new PassThrough();
+
+  const _write = socket.write;
+  const socketWriteFn = mock.fn((chunk) => _write.call(socket, chunk));
+  socket.write = socketWriteFn;
+
+  const execute = attachRequest({
+    signal: controller.signal,
+    socket,
+    doSocketEnd,
+    onHttpError,
+    onHttpRequestHeader,
+    onHttpResponseEnd,
+  });
+
+  await execute(Buffer.from('POST /quan HTTP/1.1\r\nContent-Length: 4\r\nUser-Agent: quan\r\n\r\nquan'));
+
+  await waitFor(500);
+  assert.equal(doSocketEnd.mock.calls.length, 0);
+  assert.equal(onHttpError.mock.calls.length, 0);
+  assert.equal(onHttpRequestHeader.mock.calls.length, 1);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+  assert.equal(Buffer.concat(socketWriteFn.mock.calls.map((d) => d.arguments[0])).toString(), 'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nOK\r\n0\r\n\r\n');
+  console.log();
+  server.close();
+});
+
+test('attachRequest request body with stream', async () => {
+  const controller = new AbortController();
+  const socket = new PassThrough();
+  const doSocketEnd = mock.fn(() => {});
+  const onHttpError = mock.fn(() => {});
+  const requestBodyOnData = mock.fn(() => {});
+  const requestBodyOnEnd = mock.fn(() => {});
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    ctx.request.body = new PassThrough();
+    ctx.request.body.on('data', requestBodyOnData);
+    ctx.request.body.on('end', requestBodyOnEnd);
+  });
+  const onHttpResponseEnd = mock.fn(() => {});
+
+  const execute = attachRequest({
+    signal: controller.signal,
+    socket,
+    doSocketEnd,
+    onHttpError,
+    onHttpRequestHeader,
+    onHttpResponseEnd,
+  });
+  await execute(Buffer.from('POST /quan HTTP/1.1\r\nContent-Length: 4\r\nUser-Agent: quan\r\n\r\nq'));
+
+  await waitFor(100);
+  await execute(Buffer.from('uan'));
+  await waitFor(500);
+  assert.equal(Buffer.concat(requestBodyOnData.mock.calls.map((d) => d.arguments[0])).toString(), 'quan');
+  assert.equal(requestBodyOnEnd.mock.calls.length, 1);
 });
