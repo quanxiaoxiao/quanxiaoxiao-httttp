@@ -13,6 +13,7 @@ export default ({
     const options = {
       host: hostname || '127.0.0.1',
       port,
+      noDelay: true,
       rejectUnauthorized: !(process.env.HTTPS_REJECT_UNAUTHRIZED === 'false'),
       secureContext: tls.createSecureContext({
         secureProtocol: 'TLSv1_2_method',
