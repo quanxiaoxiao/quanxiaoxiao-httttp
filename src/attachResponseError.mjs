@@ -28,8 +28,16 @@ export default (ctx) => {
       ctx.response.statusCode = 500;
     }
   }
+  if (ctx.response.statusCode >= 400
+    && ctx.response.statusCode <= 499
+    && ctx.error.message
+  ) {
+    ctx.response.body = ctx.error.message;
+  }
   if (STATUS_CODES[ctx.response.statusCode]) {
     ctx.response.statusText = STATUS_CODES[ctx.response.statusCode];
-    ctx.response.body = ctx.response.statusText;
+    if (!ctx.response.body) {
+      ctx.response.body = ctx.response.statusText;
+    }
   }
 };

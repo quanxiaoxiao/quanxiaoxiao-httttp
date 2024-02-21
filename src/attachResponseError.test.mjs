@@ -23,7 +23,7 @@ test('attachResponseError', () => {
   attachResponseError(ctx);
   assert.equal(ctx.response.statusCode, 404);
   assert.equal(ctx.response.statusText, STATUS_CODES[404]);
-  assert.equal(ctx.response.body, STATUS_CODES[404]);
+  assert.equal(ctx.response.body, 'test not found');
 
   ctx.error = new errors.SocketConnectError();
   attachResponseError(ctx);
