@@ -2,7 +2,6 @@
 import process from 'node:process';
 import assert from 'node:assert';
 import attachRequest from './attachRequest.mjs';
-import { getCurrentDateTime } from './dateTime.mjs';
 
 export default ({
   onFinish,
@@ -13,7 +12,7 @@ export default ({
   const { remoteAddress } = socket;
 
   const state = {
-    dateTimeCreate: getCurrentDateTime(),
+    dateTimeCreate: Date.now(),
     isEndEventBind: false,
     isErrorEventBind: false,
     isEndEmit: false,

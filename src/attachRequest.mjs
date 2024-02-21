@@ -10,7 +10,6 @@ import forwardRequest from './forwardRequest.mjs';
 import forwardWebsocket from './forwardWebsocket.mjs';
 import attachResponseError from './attachResponseError.mjs';
 import generateResponse from './generateResponse.mjs';
-import { getCurrentDateTime } from './dateTime.mjs';
 
 export default ({
   signal,
@@ -115,7 +114,7 @@ export default ({
         }
       },
       onHeader: async (ret) => {
-        ctx.request.dateTimeHeader = getCurrentDateTime();
+        ctx.request.dateTimeHeader = Date.now();
         ctx.request.headersRaw = ret.headersRaw;
         ctx.request.headers = ret.headers;
         if (onHttpRequestHeader) {
@@ -206,7 +205,7 @@ export default ({
       onBody: (chunk) => {
         if (!ctx.request.connection) {
           if (ctx.request.dateTimeBody == null) {
-            ctx.request.dateTimeBody = getCurrentDateTime();
+            ctx.request.dateTimeBody = Date.now();
           }
           if (ctx.onRequest) {
             ctx.request.body = ctx.request.body ? Buffer.concat([ctx.request.body, chunk]) : chunk;
@@ -217,7 +216,7 @@ export default ({
       },
       onEnd: async () => {
         if (!ctx.request.connection) {
-          ctx.request.dateTimeEnd = getCurrentDateTime();
+          ctx.request.dateTimeEnd = Date.now();
           if (ctx.request.dateTimeBody == null) {
             ctx.request.dateTimeBody = ctx.request.dateTimeEnd;
           }
@@ -265,7 +264,7 @@ export default ({
       state.ctx = {
         socket,
         request: {
-          dateTimeCreate: getCurrentDateTime(),
+          dateTimeCreate: Date.now(),
           remoteAddress: clientAddress,
           connection: false,
           dateTimeHeader: null,

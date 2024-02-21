@@ -6,7 +6,6 @@ import {
 import createError from 'http-errors';
 import getSocketConnection from './getSocketConnection.mjs';
 import attachResponseError from './attachResponseError.mjs';
-import { getCurrentDateTime } from './dateTime.mjs';
 
 export default async ({
   ctx,
@@ -26,7 +25,7 @@ export default async ({
   };
 
   ctx.response = {
-    dateTimeCreate: getCurrentDateTime(),
+    dateTimeCreate: Date.now(),
     dateTimeConnect: null,
     dateTimeResponse: null,
     dateTimeBody: null,
@@ -96,7 +95,7 @@ export default async ({
           }),
         ],
         onConnect: () => {
-          ctx.requestForward.dateTimeConnect = getCurrentDateTime();
+          ctx.requestForward.dateTimeConnect = Date.now();
           ctx.response.dateTimeConnect = ctx.requestForward.dateTimeConnect;
           if (onForwardConnect) {
             onForwardConnect(ctx);
@@ -104,7 +103,7 @@ export default async ({
         },
         onIncoming: (chunk) => {
           if (ctx.response.dateTimeResponse === null) {
-            ctx.response.dateTimeResponse = getCurrentDateTime();
+            ctx.response.dateTimeResponse = Date.now();
           }
           if (!state.isResponsed) {
             state.decode(chunk)
@@ -112,7 +111,7 @@ export default async ({
                 (response) => {
                   if (response.complete) {
                     state.isResponsed = true;
-                    ctx.response.dateTimeHeader = getCurrentDateTime();
+                    ctx.response.dateTimeHeader = Date.now();
                     ctx.response.dateTimeBody = ctx.response.dateTimeHeader;
                     ctx.response.statusCode = response.statusCode;
                     ctx.response.statusText = response.statusText;
@@ -139,7 +138,7 @@ export default async ({
           }
         },
         onClose: () => {
-          ctx.response.dateTimeEnd = getCurrentDateTime();
+          ctx.response.dateTimeEnd = Date.now();
           if (state.isResponsed) {
             if (onHttpResponseEnd) {
               onHttpResponseEnd(ctx);

@@ -1,7 +1,7 @@
 import { STATUS_CODES } from 'node:http';
 import createError from 'http-errors';
 import { http } from '@quanxiaoxiao/about-net';
-import { getCurrentDateName } from './dateTime.mjs';
+import { getCurrentDateName } from '@quanxiaoxiao/http-utils';
 
 export default (ctx) => {
   if (!ctx.response) {

@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 import { STATUS_CODES } from 'node:http';
 import { errors } from '@quanxiaoxiao/about-net';
-import { getCurrentDateName } from './dateTime.mjs';
+import { getCurrentDateName } from '@quanxiaoxiao/http-utils';
 
 export default (ctx) => {
   assert(ctx.error);

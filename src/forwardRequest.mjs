@@ -3,7 +3,6 @@ import assert from 'node:assert';
 import { PassThrough, Transform } from 'node:stream';
 import { http } from '@quanxiaoxiao/about-net';
 import getSocketConnection from './getSocketConnection.mjs';
-import { getCurrentDateTime } from './dateTime.mjs';
 
 export default async ({
   ctx,
@@ -18,7 +17,7 @@ export default async ({
     transform: null,
   };
   ctx.response = {
-    dateTimeCreate: getCurrentDateTime(),
+    dateTimeCreate: Date.now(),
     dateTimeConnect: null,
     dateTimeResponse: null,
     dateTimeRequestSend: null,
@@ -71,7 +70,7 @@ export default async ({
 
   forwardOptions.onRequest = async () => {
     assert(!signal.aborted);
-    ctx.requestForward.dateTimeConnect = getCurrentDateTime();
+    ctx.requestForward.dateTimeConnect = Date.now();
     ctx.response.dateTimeConnect = ctx.requestForward.dateTimeConnect;
     if (onForwardConnect) {
       await onForwardConnect(ctx);
