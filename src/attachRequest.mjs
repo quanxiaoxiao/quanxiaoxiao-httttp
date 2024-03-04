@@ -5,8 +5,7 @@ import qs from 'node:querystring';
 import assert from 'node:assert';
 import { PassThrough } from 'node:stream';
 import createError from 'http-errors';
-import { decodeHttpRequest } from '@quanxiaoxiao/http-utils';
-import { http } from '@quanxiaoxiao/about-net';
+import { decodeHttpRequest, encodeHttp } from '@quanxiaoxiao/http-utils';
 import forwardRequest from './forwardRequest.mjs';
 import forwardWebsocket from './forwardWebsocket.mjs';
 import attachResponseError from './attachResponseError.mjs';
@@ -47,7 +46,7 @@ export default ({
       } else {
         console.error(ctx.error);
       }
-      doSocketEnd(http.encodeHttp(ctx.response));
+      doSocketEnd(encodeHttp(ctx.response));
     }
   };
 
@@ -58,7 +57,7 @@ export default ({
           await ctx.onResponse(ctx);
           assert(!signal.aborted);
         }
-        ctx.socket.write(http.encodeHttp(generateResponse(ctx)));
+        ctx.socket.write(encodeHttp(generateResponse(ctx)));
         state.ctx = null;
         if (onHttpResponseEnd) {
           onHttpResponseEnd(ctx);
@@ -86,7 +85,7 @@ export default ({
     if (ctx.onResponse) {
       await ctx.onResponse(ctx);
       assert(!signal.aborted);
-      ctx.socket.write(http.encodeHttp(generateResponse(ctx)));
+      ctx.socket.write(encodeHttp(generateResponse(ctx)));
     }
     state.ctx = null;
     if (onHttpResponseEnd) {
