@@ -30,8 +30,8 @@
     "node": ">= 20.0.0"
   },
   "dependencies": {
-    "@quanxiaoxiao/about-net": "^0.7.34",
-    "@quanxiaoxiao/http-utils": "^0.1.2",
+    "@quanxiaoxiao/about-net": "^0.7.35",
+    "@quanxiaoxiao/http-utils": "^0.3.2",
     "http-errors": "^2.0.0"
   }
 }
