@@ -5,6 +5,7 @@ import qs from 'node:querystring';
 import assert from 'node:assert';
 import { PassThrough } from 'node:stream';
 import createError from 'http-errors';
+import { decodeHttpRequest } from '@quanxiaoxiao/http-utils';
 import { http } from '@quanxiaoxiao/about-net';
 import forwardRequest from './forwardRequest.mjs';
 import forwardWebsocket from './forwardWebsocket.mjs';
@@ -94,12 +95,12 @@ export default ({
   };
 
   const bindExcute = (ctx) => {
-    state.execute = http.decodeHttpRequest({
+    state.execute = decodeHttpRequest({
       onStartLine: async (ret) => {
-        const [pathname, querystring = ''] = ret.href.split('?');
+        const [pathname, querystring = ''] = ret.path.split('?');
         ctx.request.httpVersion = ret.httpVersion;
         ctx.request.method = ret.method;
-        ctx.request.path = ret.href || '/';
+        ctx.request.path = ret.path || '/';
         ctx.request.pathname = pathname || '/';
         ctx.request.querystring = querystring;
         if (querystring) {
