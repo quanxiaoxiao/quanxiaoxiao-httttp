@@ -1,8 +1,10 @@
 import assert from 'node:assert';
+import { pipeSocketForward } from '@quanxiaoxiao/about-net';
 import {
-  http,
-  pipeSocketForward,
-} from '@quanxiaoxiao/about-net';
+  decodeHttpResponse,
+  encodeHttp,
+  convertObjectToArray,
+} from '@quanxiaoxiao/http-utils';
 import createError from 'http-errors';
 import getSocketConnection from './getSocketConnection.mjs';
 import attachResponseError from './attachResponseError.mjs';
@@ -21,7 +23,7 @@ export default async ({
   const state = {
     isResponsed: false,
     isErrorEmit: false,
-    decode: http.decodeHttpResponse(),
+    decode: decodeHttpResponse(),
   };
 
   ctx.response = {
@@ -42,13 +44,23 @@ export default async ({
     method: 'GET',
     path: ctx.request.path,
     body: null,
-    headers: http.convertHttpHeaders(ctx.request._headers || ctx.request.headersRaw || ctx.request.headers || []),
+    headers: ctx.request.headers || {},
     hostname: ctx.request.hostname,
     protocol: 'http:',
     port: 80,
     dateTimeConnect: null,
     ...ctx.requestForward,
   };
+
+  if (ctx.request._headers) {
+    ctx.requestForward.headers = ctx.request._headers;
+  } else if (ctx.request.headersRaw) {
+    ctx.requestForward.headers = ctx.request.headersRaw;
+  }
+
+  if (!Array.isArray(ctx.requestForward.headers)) {
+    ctx.requestForward.headers = convertObjectToArray(ctx.requestForward.headers);
+  }
 
   const doResponseError = () => {
     if (!state.isErrorEmit && ctx.socket.writable) {
@@ -63,7 +75,7 @@ export default async ({
       } else {
         console.error(ctx.error);
       }
-      ctx.socket.end(http.encodeHttp(ctx.response));
+      ctx.socket.end(encodeHttp(ctx.response));
     }
   };
 
@@ -87,7 +99,7 @@ export default async ({
           protocol: ctx.requestForward.protocol,
         }),
         sourceBufList: [
-          http.encodeHttp({
+          encodeHttp({
             path: ctx.requestForward.path,
             headers: ctx.requestForward.headers,
             method: 'GET',

@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer';
 import assert from 'node:assert';
 import { PassThrough, Transform } from 'node:stream';
-import { encodeHttp } from '@quanxiaoxiao/http-utils';
+import { encodeHttp, convertObjectToArray } from '@quanxiaoxiao/http-utils';
 import { http } from '@quanxiaoxiao/about-net';
 import getSocketConnection from './getSocketConnection.mjs';
 
@@ -37,7 +37,7 @@ export default async ({
     method: ctx.request.method,
     path: ctx.request.path,
     body: ctx.request.body,
-    headers: http.convertHttpHeaders(ctx.request._headers || ctx.request.headersRaw || ctx.request.headers || []),
+    headers: ctx.request.headers || {},
     hostname: ctx.request.hostname,
     protocol: 'http:',
     port: 80,
@@ -45,16 +45,15 @@ export default async ({
     ...ctx.requestForward,
   };
 
-  /*
   if (ctx.request._headers) {
-    ctx.requestForward = ctx.request._headers;
+    ctx.requestForward.headers = ctx.request._headers;
   } else if (ctx.request.headersRaw) {
-    ctx.requestForward = ctx.request.headersRaw;
+    ctx.requestForward.headers = ctx.request.headersRaw;
   }
 
-  if (!Array.isArray(ctx.requestForward)) {
+  if (!Array.isArray(ctx.requestForward.headers)) {
+    ctx.requestForward.headers = convertObjectToArray(ctx.requestForward.headers);
   }
-  */
 
   if (onForwardConnecting) {
     await onForwardConnecting(ctx);

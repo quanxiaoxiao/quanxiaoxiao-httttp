@@ -1,6 +1,6 @@
 {
   "name": "@quanxiaoxiao/httttp",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "test": "NODE_ENV=test node --test",
@@ -30,7 +30,7 @@
     "node": ">= 20.0.0"
   },
   "dependencies": {
-    "@quanxiaoxiao/about-net": "^0.7.35",
+    "@quanxiaoxiao/about-net": "^0.8.3",
     "@quanxiaoxiao/http-utils": "^0.3.2",
     "http-errors": "^2.0.0"
   }
