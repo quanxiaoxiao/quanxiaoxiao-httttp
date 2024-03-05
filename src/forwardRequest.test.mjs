@@ -248,7 +248,7 @@ test('forwardRequest response body with stream', async () => {
   assert.equal(ctx.response.body, null);
   assert.equal(ctx.response.bytesBody, 11);
   assert.equal(_socket.write.mock.calls.length, 6);
-  assert.equal(_socket.write.mock.calls[0].arguments[0].toString(), 'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n');
+  assert.equal(_socket.write.mock.calls[0].arguments[0].toString(), 'HTTP/1.1 200\r\nTransfer-Encoding: chunked\r\n\r\n');
   assert.equal(_socket.write.mock.calls[1].arguments[0].toString(), '2\r\naa\r\n');
   assert.equal(_socket.write.mock.calls[2].arguments[0].toString(), '3\r\nbbb\r\n');
   assert.equal(_socket.write.mock.calls[3].arguments[0].toString(), '3\r\nccc\r\n');

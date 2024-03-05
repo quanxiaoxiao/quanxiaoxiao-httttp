@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer';
 import assert from 'node:assert';
 import { PassThrough, Transform } from 'node:stream';
+import { encodeHttp } from '@quanxiaoxiao/http-utils';
 import { http } from '@quanxiaoxiao/about-net';
 import getSocketConnection from './getSocketConnection.mjs';
 
@@ -43,6 +44,17 @@ export default async ({
     dateTimeConnect: null,
     ...ctx.requestForward,
   };
+
+  /*
+  if (ctx.request._headers) {
+    ctx.requestForward = ctx.request._headers;
+  } else if (ctx.request.headersRaw) {
+    ctx.requestForward = ctx.request.headersRaw;
+  }
+
+  if (!Array.isArray(ctx.requestForward)) {
+  }
+  */
 
   if (onForwardConnecting) {
     await onForwardConnecting(ctx);
@@ -91,7 +103,7 @@ export default async ({
       assert(forwardOptions.onBody.writable);
       if (ctx.response.headers['content-length'] > 0
           || /^chunked$/i.test(ctx.response.headers['transfer-encoding'])) {
-        state.encode = http.encodeHttp({
+        state.encode = encodeHttp({
           ...ctx.response,
           body: new PassThrough(),
           onHeader: (chunk) => {
@@ -110,7 +122,7 @@ export default async ({
           .pipe(ctx.socket);
       } else {
         forwardOptions.onBody.destroy();
-        ctx.socket.write(http.encodeHttp(ctx.response));
+        ctx.socket.write(encodeHttp(ctx.response));
       }
     }
   };
