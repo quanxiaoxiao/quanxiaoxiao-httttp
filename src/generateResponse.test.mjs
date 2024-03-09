@@ -40,6 +40,7 @@ test('generateResponse', () => {
     },
   };
   response = generateResponse(ctx);
+  assert(Array.isArray(response.headers));
   assert.equal(response.body, JSON.stringify({ name: 'bbb' }));
   assert(response.headers.includes('application/json'));
   assert(!response.headers.includes('text/plain'));
@@ -56,6 +57,7 @@ test('generateResponse', () => {
     },
   };
   response = generateResponse(ctx);
+  assert(Array.isArray(response.headers));
   assert(!response.headers.includes('text/plain'));
   assert(response.headers.includes('text/html'));
 });
