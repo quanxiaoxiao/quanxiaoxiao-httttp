@@ -1,8 +1,8 @@
+/* eslint no-proto: 0 */
 import { mock, test } from 'node:test';
 import { PassThrough } from 'node:stream';
 import net from 'node:net';
 import assert from 'node:assert';
-import { errors } from '@quanxiaoxiao/about-net';
 import forwardRequest from './forwardRequest.mjs';
 
 const _getPort = () => {
@@ -23,6 +23,219 @@ const waitFor = async (t = 100) => {
 };
 
 const getPort = _getPort();
+
+test('forwardRequest error', async () => {
+  try {
+    await forwardRequest({
+      ctx: {},
+    });
+    throw new Error('xxx');
+  } catch (error) {
+    assert(error instanceof assert.AssertionError);
+  }
+  try {
+    await forwardRequest({
+      ctx: {
+        requestForward: [],
+      },
+    });
+    throw new Error('xxx');
+  } catch (error) {
+    assert(error instanceof assert.AssertionError);
+  }
+  try {
+    await forwardRequest({
+      ctx: {
+        request: {},
+        requestForward: {
+          headers: 'aaa',
+        },
+      },
+    });
+    throw new Error('xxx');
+  } catch (error) {
+    assert(error instanceof assert.AssertionError);
+  }
+});
+
+test('forwardRequest headers 1', async () => {
+  const onForwardConnecting = mock.fn((ctx) => {
+    assert.deepEqual(ctx.requestForward.headers, ['name', 'quan']);
+    ctx.requestForward.headers = 'xxx';
+  });
+  const ctx = {
+    request: {
+      method: 'GET',
+      path: '/aaa',
+      body: null,
+      headers: {
+        name: 'rice',
+      },
+    },
+    requestForward: {
+      hostname: '127.0.0.1',
+      headers: {
+        name: 'quan',
+      },
+      port: 9998,
+    },
+  };
+  const controller = new AbortController();
+  try {
+    await forwardRequest({
+      ctx,
+      signal: controller.signal,
+      onForwardConnecting,
+    });
+    throw new Error('xxx');
+  } catch (error) {
+    assert(error instanceof assert.AssertionError);
+    assert.equal(onForwardConnecting.mock.calls.length, 1);
+  }
+});
+
+test('forwardRequest headers 2', async () => {
+  const onForwardConnecting = mock.fn((ctx) => {
+    assert.deepEqual(ctx.requestForward.headers, ['name', 'quan']);
+    ctx.requestForward.headers = 'xxx';
+  });
+  const ctx = {
+    request: {
+      method: 'GET',
+      path: '/aaa',
+      body: null,
+      _headers: {
+        name: 'rice',
+      },
+    },
+    requestForward: {
+      hostname: '127.0.0.1',
+      headers: {
+        name: 'quan',
+      },
+      port: 9998,
+    },
+  };
+  const controller = new AbortController();
+  try {
+    await forwardRequest({
+      ctx,
+      signal: controller.signal,
+      onForwardConnecting,
+    });
+    throw new Error('xxx');
+  } catch (error) {
+    assert(error instanceof assert.AssertionError);
+    assert.equal(onForwardConnecting.mock.calls.length, 1);
+  }
+});
+
+test('forwardRequest headers 3', async () => {
+  const onForwardConnecting = mock.fn((ctx) => {
+    assert.deepEqual(ctx.requestForward.headers, ['name', 'rice']);
+    ctx.requestForward.headers = 'xxx';
+  });
+  const ctx = {
+    request: {
+      method: 'GET',
+      path: '/aaa',
+      body: null,
+      headers: {
+        name: 'quan',
+      },
+      _headers: {
+        name: 'rice',
+      },
+    },
+    requestForward: {
+      hostname: '127.0.0.1',
+      port: 9998,
+    },
+  };
+  const controller = new AbortController();
+  try {
+    await forwardRequest({
+      ctx,
+      signal: controller.signal,
+      onForwardConnecting,
+    });
+    throw new Error('xxx');
+  } catch (error) {
+    assert(error instanceof assert.AssertionError);
+    assert.equal(onForwardConnecting.mock.calls.length, 1);
+  }
+});
+
+test('forwardRequest headers 4', async () => {
+  const onForwardConnecting = mock.fn((ctx) => {
+    assert.deepEqual(ctx.requestForward.headers, ['name', 'rice']);
+    ctx.requestForward.headers = 'xxx';
+  });
+  const ctx = {
+    request: {
+      method: 'GET',
+      path: '/aaa',
+      body: null,
+      headersRaw: ['foo', 'bar'],
+      headers: {
+        name: 'quan',
+      },
+      _headers: {
+        name: 'rice',
+      },
+    },
+    requestForward: {
+      hostname: '127.0.0.1',
+      port: 9998,
+    },
+  };
+  const controller = new AbortController();
+  try {
+    await forwardRequest({
+      ctx,
+      signal: controller.signal,
+      onForwardConnecting,
+    });
+    throw new Error('xxx');
+  } catch (error) {
+    assert(error instanceof assert.AssertionError);
+    assert.equal(onForwardConnecting.mock.calls.length, 1);
+  }
+});
+
+test('forwardRequest headers 5', async () => {
+  const onForwardConnecting = mock.fn((ctx) => {
+    assert.deepEqual(ctx.requestForward.headers, ['foo', 'bar']);
+    ctx.requestForward.headers = 'xxx';
+  });
+  const ctx = {
+    request: {
+      method: 'GET',
+      path: '/aaa',
+      body: null,
+      headersRaw: ['foo', 'bar'],
+      headers: {
+        name: 'quan',
+      },
+    },
+    requestForward: {
+      hostname: '127.0.0.1',
+      port: 9998,
+    },
+  };
+  const controller = new AbortController();
+  try {
+    await forwardRequest({
+      ctx,
+      signal: controller.signal,
+      onForwardConnecting,
+    });
+    throw new Error('xxx');
+  } catch (error) {
+    assert(error instanceof assert.AssertionError);
+    assert.equal(onForwardConnecting.mock.calls.length, 1);
+  }
+});
 
 test('forwardRequest unable connect', async () => {
   const controller = new AbortController();
@@ -46,7 +259,7 @@ test('forwardRequest unable connect', async () => {
     });
     assert.fail();
   } catch (error) {
-    assert(error instanceof errors.SocketConnectError);
+    assert.equal(error.__proto__.constructor.name, 'SocketConnectError');
   }
   assert.equal(onForwardConnect.mock.calls.length, 0);
   await waitFor();
@@ -84,7 +297,7 @@ test('forwardRequest error close 1', async () => {
       onForwardConnect,
     });
   } catch (error) {
-    assert(error instanceof errors.SocketCloseError);
+    assert.equal(error.__proto__.constructor.name, 'SocketCloseError');
   }
   assert.equal(onForwardConnect.mock.calls.length, 1);
   await waitFor(300);
@@ -122,7 +335,7 @@ test('forwardRequest error close 2', async () => {
       ctx,
     });
   } catch (error) {
-    assert(error instanceof errors.SocketCloseError);
+    assert.equal(error.__proto__.constructor.name, 'SocketCloseError');
   }
   await waitFor(300);
   server.close();

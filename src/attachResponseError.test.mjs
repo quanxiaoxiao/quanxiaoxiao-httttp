@@ -1,15 +1,48 @@
+/* eslint max-classes-per-file: 0 */
 import test from 'node:test';
 import assert from 'node:assert';
 import { STATUS_CODES } from 'node:http';
 import createError from 'http-errors';
-import { errors } from '@quanxiaoxiao/about-net';
 import attachResponseError from './attachResponseError.mjs';
 
+class SocketConnectError extends Error {
+  constructor(message) {
+    super(message);
+    this.message = message || 'Socket Connect Error';
+  }
+}
+
+class SocketConnectTimeoutError extends Error {
+  constructor(message) {
+    super(message);
+    this.message = message || 'Socket Connect Timeout';
+  }
+}
+
+class UrlParseError extends Error {
+  constructor(message) {
+    super(message);
+    this.message = message || 'Url Parse Error';
+  }
+}
+
 test('attachResponseError', () => {
-  assert.throws(() => {
-    const ctx = {};
-    attachResponseError(ctx);
-  });
+  assert.throws(
+    () => {
+      const ctx = {};
+      attachResponseError(ctx);
+    },
+    (error) => error instanceof assert.AssertionError,
+  );
+  assert.throws(
+    () => {
+      const ctx = {
+        error: {},
+      };
+      attachResponseError(ctx);
+    },
+    (error) => error instanceof assert.AssertionError,
+  );
   const ctx = {};
   const error = new Error();
   ctx.error = error;
@@ -25,15 +58,15 @@ test('attachResponseError', () => {
   assert.equal(ctx.response.statusText, STATUS_CODES[404]);
   assert.equal(ctx.response.body, 'test not found');
 
-  ctx.error = new errors.SocketConnectError();
+  ctx.error = new SocketConnectError();
   attachResponseError(ctx);
   assert.equal(ctx.response.statusCode, 502);
 
-  ctx.error = new errors.SocketConnectTimeoutError();
+  ctx.error = new SocketConnectTimeoutError();
   attachResponseError(ctx);
   assert.equal(ctx.response.statusCode, 504);
 
-  ctx.error = new errors.UrlParseError();
+  ctx.error = new UrlParseError();
   attachResponseError(ctx);
   assert.equal(ctx.response.statusCode, 502);
 

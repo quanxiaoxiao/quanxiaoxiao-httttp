@@ -1,8 +1,9 @@
 import { Buffer } from 'node:buffer';
 import assert from 'node:assert';
 import { PassThrough, Transform } from 'node:stream';
+import _ from 'lodash';
 import { encodeHttp, convertObjectToArray } from '@quanxiaoxiao/http-utils';
-import { http } from '@quanxiaoxiao/about-net';
+import request from '@quanxiaoxiao/http-request';
 import getSocketConnection from './getSocketConnection.mjs';
 
 export default async ({
@@ -12,7 +13,7 @@ export default async ({
   onForwardConnect,
   onChunkIncoming,
 }) => {
-  assert(ctx.requestForward);
+  assert(_.isPlainObject(ctx.requestForward));
   const state = {
     encode: null,
     transform: null,
@@ -37,7 +38,6 @@ export default async ({
     method: ctx.request.method,
     path: ctx.request.path,
     body: ctx.request.body,
-    headers: ctx.request.headers || {},
     hostname: ctx.request.hostname,
     protocol: 'http:',
     port: 80,
@@ -45,13 +45,18 @@ export default async ({
     ...ctx.requestForward,
   };
 
-  if (ctx.request._headers) {
-    ctx.requestForward.headers = ctx.request._headers;
-  } else if (ctx.request.headersRaw) {
-    ctx.requestForward.headers = ctx.request.headersRaw;
+  if (!ctx.requestForward.headers) {
+    if (ctx.request._headers) {
+      ctx.requestForward.headers = ctx.request._headers;
+    } else if (ctx.request.headersRaw) {
+      ctx.requestForward.headers = ctx.request.headersRaw;
+    } else {
+      ctx.requestForward.headers = ctx.request.headers || {};
+    }
   }
 
   if (!Array.isArray(ctx.requestForward.headers)) {
+    assert(_.isPlainObject(ctx.requestForward.headers));
     ctx.requestForward.headers = convertObjectToArray(ctx.requestForward.headers);
   }
 
@@ -89,7 +94,7 @@ export default async ({
     }
   };
 
-  forwardOptions.onResponse = async (remoteResponse) => {
+  forwardOptions.onHeader = async (remoteResponse) => {
     assert(!signal.aborted);
     ctx.response.httpVersion = remoteResponse.httpVersion;
     ctx.response.statusCode = remoteResponse.statusCode;
@@ -99,7 +104,6 @@ export default async ({
 
     if (forwardOptions.onBody) {
       assert(forwardOptions.onBody.readable);
-      assert(forwardOptions.onBody.writable);
       if (ctx.response.headers['content-length'] > 0
           || /^chunked$/i.test(ctx.response.headers['transfer-encoding'])) {
         state.encode = encodeHttp({
@@ -126,7 +130,7 @@ export default async ({
     }
   };
 
-  const responseItem = await http.request(
+  const responseItem = await request(
     forwardOptions,
     () => getSocketConnection({
       hostname: ctx.requestForward.hostname,
@@ -139,7 +143,7 @@ export default async ({
   assert(!signal.aborted);
 
   ctx.response.dateTimeResponse = responseItem.dateTimeResponse;
-  ctx.response.bytesBody = responseItem.bytesBody;
+  ctx.response.bytesBody = responseItem.bytesResponseBody;
   ctx.response.dateTimeBody = responseItem.dateTimeBody;
   ctx.response.dateTimeEnd = responseItem.dateTimeEnd;
   ctx.response.dateTimeRequestSend = responseItem.dateTimeRequestSend;

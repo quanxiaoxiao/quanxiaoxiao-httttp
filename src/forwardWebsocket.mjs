@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { pipeSocketForward } from '@quanxiaoxiao/about-net';
+import { pipeForward } from '@quanxiaoxiao/socket';
 import {
   decodeHttpResponse,
   encodeHttp,
@@ -89,15 +89,15 @@ export default async ({
   }
 
   if (ctx.socket.writable) {
-    pipeSocketForward(
-      ctx.socket,
+    pipeForward(
+      () => ctx.socket,
+      () => getSocketConnection({
+        hostname: ctx.requestForward.hostname,
+        port: ctx.requestForward.port,
+        servername: ctx.requestForward.servername,
+        protocol: ctx.requestForward.protocol,
+      }),
       {
-        getConnect: () => getSocketConnection({
-          hostname: ctx.requestForward.hostname,
-          port: ctx.requestForward.port,
-          servername: ctx.requestForward.servername,
-          protocol: ctx.requestForward.protocol,
-        }),
         sourceBufList: [
           encodeHttp({
             path: ctx.requestForward.path,

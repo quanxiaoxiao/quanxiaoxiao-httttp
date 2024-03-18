@@ -14,11 +14,14 @@ export default ({
       host: hostname || '127.0.0.1',
       port,
       noDelay: true,
-      rejectUnauthorized: !(process.env.HTTPS_REJECT_UNAUTHRIZED === 'false'),
+      rejectUnauthorized: true,
       secureContext: tls.createSecureContext({
         secureProtocol: 'TLSv1_2_method',
       }),
     };
+    if (Array.isArray(process.env.TLS_PASS_AUTHORIZES)) {
+      options.rejectUnauthorized = !process.env.TLS_PASS_AUTHORIZES(options.host);
+    }
     if (servername) {
       options.servername = servername;
     }
@@ -26,6 +29,7 @@ export default ({
   }
   assert(protocol === 'http:');
   return net.connect({
+    noDelay: true,
     host: hostname || '127.0.0.1',
     port,
   });

@@ -1,10 +1,10 @@
+/* eslint no-proto: 0 */
 import assert from 'node:assert';
 import { STATUS_CODES } from 'node:http';
-import { errors } from '@quanxiaoxiao/about-net';
 import { getCurrentDateName } from '@quanxiaoxiao/http-utils';
 
 export default (ctx) => {
-  assert(ctx.error);
+  assert(ctx.error instanceof Error);
   ctx.response = {
     statusCode: ctx.error.statusCode,
     headers: {
@@ -13,11 +13,12 @@ export default (ctx) => {
     body: null,
   };
   if (ctx.response.statusCode == null) {
-    if (ctx.error instanceof errors.SocketConnectError) {
+    const errorName = ctx.error.__proto__.constructor.name;
+    if (errorName === 'SocketConnectError') {
       ctx.response.statusCode = 502;
-    } else if (ctx.error instanceof errors.SocketConnectTimeoutError) {
+    } else if (errorName === 'SocketConnectTimeoutError') {
       ctx.response.statusCode = 504;
-    } else if (ctx.error instanceof errors.UrlParseError) {
+    } else if (errorName === 'UrlParseError') {
       ctx.response.statusCode = 502;
     }
   }
