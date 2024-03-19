@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer';
 import assert from 'node:assert';
 import { PassThrough, Transform } from 'node:stream';
 import _ from 'lodash';
-import { encodeHttp, convertObjectToArray } from '@quanxiaoxiao/http-utils';
+import { encodeHttp } from '@quanxiaoxiao/http-utils';
 import request from '@quanxiaoxiao/http-request';
 import getSocketConnection from './getSocketConnection.mjs';
 
@@ -55,17 +55,10 @@ export default async ({
     }
   }
 
-  if (!Array.isArray(ctx.requestForward.headers)) {
-    assert(_.isPlainObject(ctx.requestForward.headers));
-    ctx.requestForward.headers = convertObjectToArray(ctx.requestForward.headers);
-  }
-
   if (onForwardConnecting) {
     await onForwardConnecting(ctx);
     assert(!signal.aborted);
   }
-
-  assert(Array.isArray(ctx.requestForward.headers));
 
   const forwardOptions = {
     signal,
@@ -79,6 +72,8 @@ export default async ({
       }
     },
   };
+
+  assert(Array.isArray(forwardOptions.headers) || _.isPlainObject(forwardOptions.headers));
 
   if (ctx.requestForward.onBody) {
     forwardOptions.onBody = ctx.requestForward.onBody;

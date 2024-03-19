@@ -60,7 +60,7 @@ test('forwardRequest error', async () => {
 
 test('forwardRequest headers 1', async () => {
   const onForwardConnecting = mock.fn((ctx) => {
-    assert.deepEqual(ctx.requestForward.headers, ['name', 'quan']);
+    assert.deepEqual(ctx.requestForward.headers, { name: 'quan' });
     ctx.requestForward.headers = 'xxx';
   });
   const ctx = {
@@ -96,7 +96,7 @@ test('forwardRequest headers 1', async () => {
 
 test('forwardRequest headers 2', async () => {
   const onForwardConnecting = mock.fn((ctx) => {
-    assert.deepEqual(ctx.requestForward.headers, ['name', 'quan']);
+    assert.deepEqual(ctx.requestForward.headers, { name: 'quan' });
     ctx.requestForward.headers = 'xxx';
   });
   const ctx = {
@@ -132,7 +132,7 @@ test('forwardRequest headers 2', async () => {
 
 test('forwardRequest headers 3', async () => {
   const onForwardConnecting = mock.fn((ctx) => {
-    assert.deepEqual(ctx.requestForward.headers, ['name', 'rice']);
+    assert.deepEqual(ctx.requestForward.headers, { name: 'rice' });
     ctx.requestForward.headers = 'xxx';
   });
   const ctx = {
@@ -168,7 +168,7 @@ test('forwardRequest headers 3', async () => {
 
 test('forwardRequest headers 4', async () => {
   const onForwardConnecting = mock.fn((ctx) => {
-    assert.deepEqual(ctx.requestForward.headers, ['name', 'rice']);
+    assert.deepEqual(ctx.requestForward.headers, { name: 'rice' });
     ctx.requestForward.headers = 'xxx';
   });
   const ctx = {
