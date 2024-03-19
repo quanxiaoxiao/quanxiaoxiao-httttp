@@ -60,7 +60,7 @@ export default async ({
     assert(!signal.aborted);
   }
 
-  const forwardOptions = {
+  const requestForwardOptions = {
     signal,
     method: ctx.requestForward.method,
     path: ctx.requestForward.path,
@@ -73,13 +73,13 @@ export default async ({
     },
   };
 
-  assert(Array.isArray(forwardOptions.headers) || _.isPlainObject(forwardOptions.headers));
+  assert(Array.isArray(requestForwardOptions.headers) || _.isPlainObject(requestForwardOptions.headers));
 
-  if (ctx.requestForward.onBody) {
-    forwardOptions.onBody = ctx.requestForward.onBody;
+  if (Object.hasOwnProperty.call(ctx.requestForward, 'onBody')) {
+    requestForwardOptions.onBody = ctx.requestForward.onBody;
   }
 
-  forwardOptions.onRequest = async () => {
+  requestForwardOptions.onRequest = async () => {
     assert(!signal.aborted);
     ctx.requestForward.dateTimeConnect = Date.now();
     ctx.response.dateTimeConnect = ctx.requestForward.dateTimeConnect;
@@ -89,7 +89,7 @@ export default async ({
     }
   };
 
-  forwardOptions.onHeader = async (remoteResponse) => {
+  requestForwardOptions.onHeader = async (remoteResponse) => {
     assert(!signal.aborted);
     ctx.response.httpVersion = remoteResponse.httpVersion;
     ctx.response.statusCode = remoteResponse.statusCode;
@@ -97,8 +97,8 @@ export default async ({
     ctx.response.headersRaw = remoteResponse.headersRaw;
     ctx.response.headers = remoteResponse.headers;
 
-    if (forwardOptions.onBody) {
-      assert(forwardOptions.onBody.readable);
+    if (requestForwardOptions.onBody) {
+      assert(requestForwardOptions.onBody.readable);
       if (ctx.response.headers['content-length'] > 0
           || /^chunked$/i.test(ctx.response.headers['transfer-encoding'])) {
         state.encode = encodeHttp({
@@ -115,18 +115,18 @@ export default async ({
           },
         });
 
-        forwardOptions.onBody
+        requestForwardOptions.onBody
           .pipe(state.transform)
           .pipe(ctx.socket);
       } else {
-        forwardOptions.onBody.destroy();
+        requestForwardOptions.onBody.destroy();
         ctx.socket.write(encodeHttp(ctx.response));
       }
     }
   };
 
   const responseItem = await request(
-    forwardOptions,
+    requestForwardOptions,
     () => getSocketConnection({
       hostname: ctx.requestForward.hostname,
       servername: ctx.requestForward.servername,
@@ -143,9 +143,9 @@ export default async ({
   ctx.response.dateTimeEnd = responseItem.dateTimeEnd;
   ctx.response.dateTimeRequestSend = responseItem.dateTimeRequestSend;
 
-  if (!forwardOptions.onBody) {
+  if (!requestForwardOptions.onBody) {
     ctx.response.body = responseItem.body;
-  } else if (!forwardOptions.onBody.destroyed) {
+  } else if (!requestForwardOptions.onBody.destroyed) {
     await Promise.all([
       state.transform.writableNeedDrain ? new Promise((resolve) => {
         state.transform.once('drain', () => {
@@ -165,7 +165,7 @@ export default async ({
     assert(!signal.aborted);
     setTimeout(() => {
       state.transform.unpipe(ctx.socket);
-      forwardOptions.onBody.destroy();
+      requestForwardOptions.onBody.destroy();
       ctx.socket.write(state.encode());
     });
   }
