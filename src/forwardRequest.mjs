@@ -19,12 +19,6 @@ export default async ({
     transform: null,
   };
   ctx.response = {
-    dateTimeCreate: Date.now(),
-    dateTimeConnect: null,
-    dateTimeResponse: null,
-    dateTimeRequestSend: null,
-    dateTimeBody: null,
-    dateTimeEnd: null,
     bytesBody: 0,
     httpVersion: null,
     statusCode: null,
@@ -41,8 +35,15 @@ export default async ({
     hostname: ctx.request.hostname,
     protocol: 'http:',
     port: 80,
-    dateTimeConnect: null,
     ...ctx.requestForward,
+    timeOnConnect: null,
+    timeOnRequestSend: null,
+    timeOnRequestEnd: null,
+    timeOnResponse: null,
+    timeOnResponseStartLine: null,
+    timeOnResponseHeader: null,
+    timeOnResponseBody: null,
+    timeOnResponseEnd: null,
   };
 
   if (!ctx.requestForward.headers) {
@@ -85,15 +86,13 @@ export default async ({
 
   requestForwardOptions.onRequest = async () => {
     assert(!signal.aborted);
-    ctx.requestForward.dateTimeConnect = Date.now();
-    ctx.response.dateTimeConnect = ctx.requestForward.dateTimeConnect;
     if (onForwardConnect) {
       await onForwardConnect(ctx);
       assert(!signal.aborted);
     }
   };
 
-  requestForwardOptions.onHeader = async (remoteResponse) => {
+  requestForwardOptions.onHeader = (remoteResponse) => {
     assert(!signal.aborted);
     ctx.response.httpVersion = remoteResponse.httpVersion;
     ctx.response.statusCode = remoteResponse.statusCode;
@@ -142,11 +141,16 @@ export default async ({
 
   assert(!signal.aborted);
 
-  ctx.response.dateTimeResponse = responseItem.dateTimeResponse;
   ctx.response.bytesBody = responseItem.bytesResponseBody;
-  ctx.response.dateTimeBody = responseItem.dateTimeBody;
-  ctx.response.dateTimeEnd = responseItem.dateTimeEnd;
-  ctx.response.dateTimeRequestSend = responseItem.dateTimeRequestSend;
+
+  ctx.requestForward.timeOnConnect = responseItem.timeOnConnect;
+  ctx.requestForward.timeOnRequestSend = responseItem.timeOnRequestSend;
+  ctx.requestForward.timeOnResponse = responseItem.timeOnResponse;
+  ctx.requestForward.timeOnRequestEnd = responseItem.timeOnRequestEnd;
+  ctx.requestForward.timeOnResponseStartLine = responseItem.timeOnResponseStartLine;
+  ctx.requestForward.timeOnResponseHeader = responseItem.timeOnResponseHeader;
+  ctx.requestForward.timeOnResponseBody = responseItem.timeOnResponseBody;
+  ctx.requestForward.timeOnResponseEnd = responseItem.timeOnResponseEnd;
 
   if (!requestForwardOptions.onBody) {
     ctx.response.body = responseItem.body;

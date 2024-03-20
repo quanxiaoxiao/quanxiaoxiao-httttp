@@ -3,6 +3,7 @@ import { mock, test } from 'node:test';
 import { PassThrough } from 'node:stream';
 import net from 'node:net';
 import assert from 'node:assert';
+import { decodeHttpRequest } from '@quanxiaoxiao/http-utils';
 import forwardRequest from './forwardRequest.mjs';
 
 const _getPort = () => {
@@ -467,5 +468,64 @@ test('forwardRequest response body with stream', async () => {
   assert.equal(_socket.write.mock.calls[3].arguments[0].toString(), '3\r\nccc\r\n');
   assert.equal(_socket.write.mock.calls[4].arguments[0].toString(), '3\r\nddd\r\n');
   assert.equal(_socket.write.mock.calls[5].arguments[0].toString(), '0\r\n\r\n');
+  server.close();
+});
+
+test('forwardRequest request body with stream', { only: true }, async () => {
+  const port = getPort();
+  const server = net.createServer((socket) => {
+    const decode = decodeHttpRequest({
+      onBody: (chunk) => {
+      },
+    });
+    socket.on('data', (chunk) => {
+      decode(chunk)
+        .then((ret) => {
+          if (ret.complete) {
+            socket.write('HTTP/1.1 200\r\nContent-Length: 2\r\n\r\nok');
+          }
+        });
+    });
+  });
+  server.listen(port);
+
+  const controller = new AbortController();
+  const _socket = new PassThrough();
+  const bodyStream = new PassThrough();
+  const ctx = {
+    socket: _socket,
+    request: {
+      method: 'POST',
+      path: '/aaa',
+      body: null,
+    },
+    requestForward: {
+      hostname: '127.0.0.1',
+      port,
+      protocol: 'http:',
+      body: bodyStream,
+    },
+  };
+  await forwardRequest({
+    signal: controller.signal,
+    ctx,
+    onForwardConnect: () => {
+      setTimeout(() => {
+        bodyStream.write(Buffer.from('aaa'));
+        bodyStream.write(Buffer.from('bbb'));
+        bodyStream.write(Buffer.from('ccc'));
+        bodyStream.end();
+      }, 100);
+    },
+  });
+
+  assert.equal(ctx.response.body.toString(), 'ok');
+  assert.equal(ctx.response.statusCode, 200);
+  assert.equal(typeof ctx.requestForward.timeOnRequestSend, 'number');
+  assert.equal(typeof ctx.requestForward.timeOnResponseEnd, 'number');
+
+  assert(ctx.requestForward.body.destroyed);
+
+  await waitFor(300);
   server.close();
 });

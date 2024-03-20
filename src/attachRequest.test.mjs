@@ -26,7 +26,6 @@ const getPort = _getPort();
 test('attachRequest', async () => {
   const controller = new AbortController();
   const onHttpRequest = mock.fn((ctx) => {
-    assert.equal(typeof ctx.request.dateTimeCreate, 'number');
     assert.equal(ctx.request.path, null);
     assert.equal(ctx.request.pathname, null);
     assert.equal(ctx.request.querystring, '');
@@ -699,7 +698,6 @@ test('attachRequest forward by server close', async () => {
   const doSocketEnd = mock.fn(() => {});
   const onHttpError = mock.fn((ctx) => {
     assert.equal(ctx.response.statusCode, 502);
-    assert.equal(typeof ctx.requestForward.dateTimeConnect, 'number');
   });
   const onHttpRequestHeader = mock.fn((ctx) => {
     assert.equal(ctx.requestForward, null);
@@ -709,9 +707,7 @@ test('attachRequest forward by server close', async () => {
     };
   });
 
-  const onForwardConnect = mock.fn((ctx) => {
-    assert.equal(typeof ctx.requestForward.dateTimeConnect, 'number');
-  });
+  const onForwardConnect = mock.fn(() => {});
 
   const onHttpResponseEnd = mock.fn(() => {});
 
@@ -951,9 +947,7 @@ test('attachRequest websocket server close', async () => {
   });
   const onHttpResponseEnd = mock.fn(() => {});
   const onHttpRequestConnection = mock.fn(() => {});
-  const onForwardConnect = mock.fn((ctx) => {
-    assert.equal(typeof ctx.requestForward.dateTimeConnect, 'number');
-  });
+  const onForwardConnect = mock.fn(() => {});
   const onHttpRequestHeader = mock.fn((ctx) => {
     ctx.requestForward = {
       port: port1,
