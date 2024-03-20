@@ -77,6 +77,10 @@ export default async ({
 
   if (Object.hasOwnProperty.call(ctx.requestForward, 'onBody')) {
     requestForwardOptions.onBody = ctx.requestForward.onBody;
+    if (requestForwardOptions.onBody && typeof requestForwardOptions.onBody.pipe === 'function') {
+      assert(requestForwardOptions.onBody.readable);
+      assert(requestForwardOptions.onBody.writable);
+    }
   }
 
   requestForwardOptions.onRequest = async () => {
@@ -99,6 +103,7 @@ export default async ({
 
     if (requestForwardOptions.onBody) {
       assert(requestForwardOptions.onBody.readable);
+      assert(requestForwardOptions.onBody.writable);
       if (ctx.response.headers['content-length'] > 0
           || /^chunked$/i.test(ctx.response.headers['transfer-encoding'])) {
         state.encode = encodeHttp({
