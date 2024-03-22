@@ -1,8 +1,12 @@
 /* eslint no-proto: 0 */
 import { mock, test } from 'node:test';
 import { PassThrough } from 'node:stream';
+import process from 'node:process';
+import fs from 'node:fs';
+import path from 'node:path';
 import net from 'node:net';
 import assert from 'node:assert';
+import _ from 'lodash';
 import { decodeHttpRequest } from '@quanxiaoxiao/http-utils';
 import forwardRequest from './forwardRequest.mjs';
 
@@ -471,22 +475,44 @@ test('forwardRequest response body with stream', async () => {
   server.close();
 });
 
-test('forwardRequest request body with stream', { only: true }, async () => {
+test('forwardRequest request body with stream', async () => {
   const port = getPort();
+  const pathname = path.resolve(process.cwd(), '_temp', 'test_111');
+  const ws = fs.createWriteStream(pathname);
   const server = net.createServer((socket) => {
     const decode = decodeHttpRequest({
       onBody: (chunk) => {
+        const ret = ws.write(chunk);
+        if (ret === false) {
+          socket.pause();
+        }
       },
+    });
+    ws.on('drain', () => {
+      if (socket.readable && socket.isPaused()) {
+        socket.resume();
+      }
     });
     socket.on('data', (chunk) => {
       decode(chunk)
         .then((ret) => {
           if (ret.complete) {
             socket.write('HTTP/1.1 200\r\nContent-Length: 2\r\n\r\nok');
+            ws.end();
           }
         });
     });
   });
+
+  let isPaused = false;
+  const count = 20000;
+  const content = 'adsfadsfa dfadsfw';
+  let i = 0;
+
+  const handleFinish = mock.fn(() => {});
+
+  ws.on('finish', handleFinish);
+
   server.listen(port);
 
   const controller = new AbortController();
@@ -506,15 +532,34 @@ test('forwardRequest request body with stream', { only: true }, async () => {
       body: bodyStream,
     },
   };
+
+  const walk = () => {
+    while (!isPaused && i < count) {
+      const s = `${_.times(800).map(() => content).join('')}:${i}`;
+      const ret = bodyStream.write(s);
+      if (ret === false) {
+        isPaused = true;
+      }
+      i++;
+    }
+    if (i >= count && !bodyStream.writableEnded) {
+      bodyStream.end();
+    }
+  };
+
+  bodyStream.on('drain', () => {
+    isPaused = false;
+    setTimeout(() => {
+      walk();
+    });
+  });
+
   await forwardRequest({
     signal: controller.signal,
     ctx,
     onForwardConnect: () => {
       setTimeout(() => {
-        bodyStream.write(Buffer.from('aaa'));
-        bodyStream.write(Buffer.from('bbb'));
-        bodyStream.write(Buffer.from('ccc'));
-        bodyStream.end();
+        walk();
       }, 100);
     },
   });
@@ -527,5 +572,9 @@ test('forwardRequest request body with stream', { only: true }, async () => {
   assert(ctx.requestForward.body.destroyed);
 
   await waitFor(300);
+  assert.equal(handleFinish.mock.calls.length, 1);
   server.close();
+  const buf = fs.readFileSync(pathname);
+  assert(new RegExp(`:${count - 1}$`).test(buf));
+  fs.unlinkSync(pathname);
 });
