@@ -18,6 +18,7 @@ export default async ({
     encode: null,
     transform: null,
   };
+
   ctx.response = {
     bytesBody: 0,
     httpVersion: null,
@@ -105,7 +106,9 @@ export default async ({
           ...ctx.response,
           body: new PassThrough(),
           onHeader: (chunk) => {
-            ctx.socket.write(Buffer.concat([chunk, Buffer.from('\r\n')]));
+            if (ctx.socket.writable) {
+              ctx.socket.write(Buffer.concat([chunk, Buffer.from('\r\n')]));
+            }
           },
         });
 
@@ -120,7 +123,9 @@ export default async ({
           .pipe(ctx.socket);
       } else {
         requestForwardOptions.onBody.destroy();
-        ctx.socket.write(encodeHttp(ctx.response));
+        if (ctx.socket.writable) {
+          ctx.socket.write(encodeHttp(ctx.response));
+        }
       }
     }
   };
@@ -168,7 +173,9 @@ export default async ({
     setTimeout(() => {
       state.transform.unpipe(ctx.socket);
       requestForwardOptions.onBody.destroy();
-      ctx.socket.write(state.encode());
+      if (ctx.socket.writable) {
+        ctx.socket.write(state.encode());
+      }
     });
   }
 };

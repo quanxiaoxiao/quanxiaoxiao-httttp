@@ -579,7 +579,7 @@ test('forwardRequest request body with stream', async () => {
   fs.unlinkSync(pathname);
 });
 
-test('forwardRequest response onbody with stream', { only: true }, async () => {
+test('forwardRequest response onbody with stream', async () => {
   const port = getPort();
   let isPaused = false;
   const count = 20000;
