@@ -737,3 +737,87 @@ test('forwardRequest response onbody with stream, server socket close', async ()
   server.close();
   fs.unlinkSync(pathname);
 });
+
+test('forwardRequest request body with stream, server socket close', async () => {
+  const port = getPort();
+  const server = net.createServer((socket) => {
+    let i = 0;
+    const decode = decodeHttpRequest({
+      onBody: () => {
+        i++;
+      },
+    });
+    socket.on('data', (chunk) => {
+      decode(chunk)
+        .then(() => {
+          if (i >= 20000) {
+            if (!socket.destroyed) {
+              socket.destroy();
+            }
+          }
+        });
+    });
+  });
+
+  let isPaused = false;
+  let i = 0;
+  const content = 'adsfadsfa dfadsfw';
+
+  server.listen(port);
+
+  const controller = new AbortController();
+  const _socket = new PassThrough();
+  const bodyStream = new PassThrough();
+  const ctx = {
+    socket: _socket,
+    request: {
+      method: 'POST',
+      path: '/aaa',
+      body: null,
+    },
+    requestForward: {
+      hostname: '127.0.0.1',
+      port,
+      protocol: 'http:',
+      body: bodyStream,
+    },
+  };
+
+  const walk = () => {
+    while (!isPaused) {
+      const s = `${_.times(800).map(() => content).join('')}:${i}`;
+      const ret = bodyStream.write(s);
+      if (ret === false) {
+        isPaused = true;
+      }
+      i++;
+    }
+  };
+
+  bodyStream.on('drain', () => {
+    isPaused = false;
+    setTimeout(() => {
+      walk();
+    });
+  });
+
+  try {
+    await forwardRequest({
+      signal: controller.signal,
+      ctx,
+      onForwardConnect: () => {
+        setTimeout(() => {
+          walk();
+        }, 100);
+      },
+    });
+    throw new Error('xxx');
+  } catch (error) {
+    assert(error.message !== 'xxx');
+  }
+
+  await waitFor(300);
+  assert(!bodyStream.destroyed);
+
+  server.close();
+});
