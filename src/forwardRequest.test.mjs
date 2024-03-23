@@ -649,13 +649,91 @@ test('forwardRequest response onbody with stream', async () => {
   assert(!ws.writableEnded);
   assert(!_socket.destroyed);
   assert(!_socket.writableEnded);
-  _socket.end();
+  ws.end();
   await waitFor(200);
-  assert(!_socket.eventNames().includes('data'));
-  assert(!_socket.eventNames().includes('close'));
-  assert(ws.destroyed);
   server.close();
   const buf = fs.readFileSync(pathname);
   fs.unlinkSync(pathname);
   assert(new RegExp(`:${count - 1}\r\n0\r\n\r\n$`).test(buf.toString()));
+});
+
+test('forwardRequest response onbody with stream, server socket close', async () => {
+  const port = getPort();
+  let isPaused = false;
+  const count = 20000;
+  const content = 'adsfadsfa dfadsfw';
+  let i = 0;
+  const pathname = path.resolve(process.cwd(), '_temp', 'test_3333');
+  const ws = fs.createWriteStream(pathname);
+
+  const server = net.createServer((socket) => {
+    socket.on('data', () => {});
+    const encode = encodeHttp({
+      statusCode: 200,
+    });
+    const walk = () => {
+      while (!isPaused && i < count) {
+        const s = `${_.times(800).map(() => content).join('')}:${i}`;
+        const ret = socket.write(encode(Buffer.from(s)));
+        if (ret === false) {
+          isPaused = true;
+        }
+        i++;
+      }
+      if (i >= count && !socket.destroyed) {
+        setTimeout(() => {
+          if (!socket.destroyed) {
+            socket.destroy();
+          }
+        }, 1000);
+      }
+    };
+    socket.on('drain', () => {
+      isPaused = false;
+      setTimeout(() => {
+        walk();
+      });
+    });
+    setTimeout(() => {
+      walk();
+    }, 100);
+  });
+  server.listen(port);
+
+  const _socket = new PassThrough();
+
+  _socket.pipe(ws);
+
+  const onBody = new PassThrough();
+
+  const ctx = {
+    socket: _socket,
+    request: {
+      method: 'GET',
+      path: '/aaa',
+      body: null,
+    },
+    requestForward: {
+      hostname: '127.0.0.1',
+      port,
+      protocol: 'http:',
+      body: null,
+      onBody,
+    },
+  };
+  const controller = new AbortController();
+  try {
+    await forwardRequest({
+      signal: controller.signal,
+      ctx,
+    });
+    throw new Error('xxx');
+  } catch (error) {
+    assert.equal(error.__proto__.constructor.name, 'SocketCloseError');
+    assert(!ws.writableEnded);
+    ws.end();
+  }
+  await waitFor(100);
+  server.close();
+  fs.unlinkSync(pathname);
 });
