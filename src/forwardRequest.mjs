@@ -58,7 +58,6 @@ export default async ({
 
   if (onForwardConnecting) {
     await onForwardConnecting(ctx);
-    assert(!signal.aborted);
   }
 
   const requestForwardOptions = {
@@ -85,15 +84,12 @@ export default async ({
   }
 
   requestForwardOptions.onRequest = async () => {
-    assert(!signal.aborted);
     if (onForwardConnect) {
       await onForwardConnect(ctx);
-      assert(!signal.aborted);
     }
   };
 
   requestForwardOptions.onHeader = (remoteResponse) => {
-    assert(!signal.aborted);
     ctx.response.httpVersion = remoteResponse.httpVersion;
     ctx.response.statusCode = remoteResponse.statusCode;
     ctx.response.statusText = remoteResponse.statusText;
@@ -139,8 +135,6 @@ export default async ({
     }),
   );
 
-  assert(!signal.aborted);
-
   ctx.response.bytesBody = responseItem.bytesResponseBody;
 
   ctx.requestForward.timeOnConnect = responseItem.timeOnConnect;
@@ -171,7 +165,6 @@ export default async ({
         });
       }) : Promise.resolve(),
     ]);
-    assert(!signal.aborted);
     setTimeout(() => {
       state.transform.unpipe(ctx.socket);
       requestForwardOptions.onBody.destroy();

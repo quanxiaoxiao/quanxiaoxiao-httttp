@@ -7,7 +7,7 @@ import path from 'node:path';
 import net from 'node:net';
 import assert from 'node:assert';
 import _ from 'lodash';
-import { decodeHttpRequest } from '@quanxiaoxiao/http-utils';
+import { decodeHttpRequest, encodeHttp } from '@quanxiaoxiao/http-utils';
 import forwardRequest from './forwardRequest.mjs';
 
 const _getPort = () => {
@@ -577,4 +577,85 @@ test('forwardRequest request body with stream', async () => {
   const buf = fs.readFileSync(pathname);
   assert(new RegExp(`:${count - 1}$`).test(buf));
   fs.unlinkSync(pathname);
+});
+
+test('forwardRequest response onbody with stream', { only: true }, async () => {
+  const port = getPort();
+  let isPaused = false;
+  const count = 20000;
+  const content = 'adsfadsfa dfadsfw';
+  let i = 0;
+  const pathname = path.resolve(process.cwd(), '_temp', 'test_222');
+  const ws = fs.createWriteStream(pathname);
+
+  const server = net.createServer((socket) => {
+    socket.on('data', () => {});
+    const encode = encodeHttp({
+      statusCode: 200,
+    });
+    const walk = () => {
+      while (!isPaused && i < count) {
+        const s = `${_.times(800).map(() => content).join('')}:${i}`;
+        const ret = socket.write(encode(Buffer.from(s)));
+        if (ret === false) {
+          isPaused = true;
+        }
+        i++;
+      }
+      if (i >= count && !socket.writableEnded) {
+        socket.end(encode());
+      }
+    };
+    socket.on('drain', () => {
+      isPaused = false;
+      setTimeout(() => {
+        walk();
+      });
+    });
+    setTimeout(() => {
+      walk();
+    }, 1000);
+  });
+  server.listen(port);
+
+  const _socket = new PassThrough();
+
+  _socket.pipe(ws);
+
+  const onBody = new PassThrough();
+
+  const ctx = {
+    socket: _socket,
+    request: {
+      method: 'GET',
+      path: '/aaa',
+      body: null,
+    },
+    requestForward: {
+      hostname: '127.0.0.1',
+      port,
+      protocol: 'http:',
+      body: null,
+      onBody,
+    },
+  };
+  const controller = new AbortController();
+  await forwardRequest({
+    signal: controller.signal,
+    ctx,
+  });
+  await waitFor(100);
+  assert(onBody.destroyed);
+  assert(!ws.writableEnded);
+  assert(!_socket.destroyed);
+  assert(!_socket.writableEnded);
+  _socket.end();
+  await waitFor(200);
+  assert(!_socket.eventNames().includes('data'));
+  assert(!_socket.eventNames().includes('close'));
+  assert(ws.destroyed);
+  server.close();
+  const buf = fs.readFileSync(pathname);
+  fs.unlinkSync(pathname);
+  assert(new RegExp(`:${count - 1}\r\n0\r\n\r\n$`).test(buf.toString()));
 });
