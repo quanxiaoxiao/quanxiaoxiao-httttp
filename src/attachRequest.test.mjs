@@ -920,9 +920,9 @@ test('attachRequest websocket', async () => {
 
   await waitFor(500);
 
-  assert.equal(onHttpError.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 0);
   assert.equal(onHttpRequestConnection.mock.calls.length, 1);
-  assert.equal(onHttpResponseEnd.mock.calls.length, 0);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 1);
 });
 
 test('attachRequest websocket server close', async () => {
@@ -979,9 +979,9 @@ test('attachRequest websocket server close', async () => {
 
   await waitFor(500);
 
-  assert.equal(onHttpError.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 0);
   assert.equal(onHttpRequestConnection.mock.calls.length, 1);
-  assert.equal(onHttpResponseEnd.mock.calls.length, 0);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 1);
   assert.equal(onForwardConnect.mock.calls.length, 1);
   assert.equal(detach.mock.calls.length, 1);
   server1.close();

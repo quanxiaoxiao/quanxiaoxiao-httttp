@@ -1,11 +1,10 @@
 import assert from 'node:assert';
-import { pipeForward } from '@quanxiaoxiao/socket';
+import _ from 'lodash';
 import {
   decodeHttpResponse,
   encodeHttp,
-  convertObjectToArray,
 } from '@quanxiaoxiao/http-utils';
-import createError from 'http-errors';
+import { pipeForward } from '@quanxiaoxiao/socket';
 import getSocketConnection from './getSocketConnection.mjs';
 import attachResponseError from './attachResponseError.mjs';
 
@@ -18,21 +17,15 @@ export default async ({
   onHttpResponseEnd,
   onHttpError,
 }) => {
-  assert(ctx.requestForward);
+  assert(_.isPlainObject(ctx.requestForward));
 
   const state = {
     isResponsed: false,
-    isErrorEmit: false,
-    decode: decodeHttpResponse(),
+    timeStart: null,
+    decode: null,
   };
 
   ctx.response = {
-    dateTimeCreate: Date.now(),
-    dateTimeConnect: null,
-    dateTimeResponse: null,
-    dateTimeBody: null,
-    dateTimeHeader: null,
-    dateTimeEnd: null,
     httpVersion: null,
     statusCode: null,
     statusText: null,
@@ -44,133 +37,135 @@ export default async ({
     method: 'GET',
     path: ctx.request.path,
     body: null,
-    headers: ctx.request.headers || {},
     hostname: ctx.request.hostname,
     protocol: 'http:',
     port: 80,
-    dateTimeConnect: null,
     ...ctx.requestForward,
+    timeOnConnect: null,
+    timeOnRequestSend: null,
+    timeOnRequestEnd: null,
+    timeOnResponse: null,
+    timeOnResponseStartLine: null,
+    timeOnResponseHeader: null,
+    timeOnResponseBody: null,
+    timeOnResponseEnd: null,
   };
 
-  if (ctx.request._headers) {
-    ctx.requestForward.headers = ctx.request._headers;
-  } else if (ctx.request.headersRaw) {
-    ctx.requestForward.headers = ctx.request.headersRaw;
-  }
-
-  if (!Array.isArray(ctx.requestForward.headers)) {
-    ctx.requestForward.headers = convertObjectToArray(ctx.requestForward.headers);
-  }
-
-  const doResponseError = () => {
-    if (!state.isErrorEmit && ctx.socket.writable) {
-      state.isErrorEmit = true;
-      attachResponseError(ctx);
-      if (onHttpError) {
-        try {
-          onHttpError(ctx);
-        } catch (error) {
-          console.error(error);
-        }
-      } else {
-        console.error(ctx.error);
-      }
-      ctx.socket.end(encodeHttp(ctx.response));
+  if (!ctx.requestForward.headers) {
+    if (ctx.request._headers) {
+      ctx.requestForward.headers = ctx.request._headers;
+    } else if (ctx.request.headersRaw) {
+      ctx.requestForward.headers = ctx.request.headersRaw;
+    } else {
+      ctx.requestForward.headers = ctx.request.headers || {};
     }
-  };
+  }
 
   if (onForwardConnecting) {
-    try {
-      await onForwardConnecting(ctx);
-    } catch (error) {
-      ctx.error = error;
-      doResponseError();
-    }
+    await onForwardConnecting(ctx);
   }
 
-  if (ctx.socket.writable) {
-    pipeForward(
-      () => ctx.socket,
-      () => getSocketConnection({
-        hostname: ctx.requestForward.hostname,
-        port: ctx.requestForward.port,
-        servername: ctx.requestForward.servername,
-        protocol: ctx.requestForward.protocol,
-      }),
-      {
-        sourceBufList: [
-          encodeHttp({
+  assert(Array.isArray(ctx.requestForward.headers) || _.isPlainObject(ctx.requestForward.headers));
+
+  state.timeStart = performance.now();
+
+  const calcTime = () => performance.now() - state.timeStart;
+
+  state.decode = decodeHttpResponse({
+    onStartLine: (ret) => {
+      ctx.requestForward.timeOnResponseStartLine = calcTime();
+      ctx.response.statusCode = ret.statusCode;
+      ctx.response.statusText = ret.statusText;
+      ctx.response.httpVersion = ret.httpVersion;
+    },
+    onHeader: (ret) => {
+      ctx.requestForward.timeOnResponseHeader = calcTime();
+      ctx.response.headers = ret.headers;
+      ctx.response.headersRaw = ret.headersRaw;
+    },
+  });
+
+  const socketDest = getSocketConnection({
+    hostname: ctx.requestForward.hostname,
+    port: ctx.requestForward.port,
+    servername: ctx.requestForward.servername,
+    protocol: ctx.requestForward.protocol,
+  });
+
+  pipeForward(
+    () => ctx.socket,
+    () => socketDest,
+    {
+      onConnect: async (ret) => {
+        ctx.requestForward.timeOnConnect = ret.timeConnect;
+        if (onForwardConnect) {
+          await onForwardConnect(ctx);
+        }
+        if (socketDest.writable) {
+          socketDest.write(encodeHttp({
             path: ctx.requestForward.path,
             headers: ctx.requestForward.headers,
             method: 'GET',
             body: null,
-          }),
-        ],
-        onConnect: () => {
-          ctx.requestForward.dateTimeConnect = Date.now();
-          ctx.response.dateTimeConnect = ctx.requestForward.dateTimeConnect;
-          if (onForwardConnect) {
-            onForwardConnect(ctx);
-          }
-        },
-        onIncoming: (chunk) => {
-          if (ctx.response.dateTimeResponse === null) {
-            ctx.response.dateTimeResponse = Date.now();
-          }
-          if (!state.isResponsed) {
-            state.decode(chunk)
-              .then(
-                (response) => {
-                  if (response.complete) {
-                    state.isResponsed = true;
-                    ctx.response.dateTimeHeader = Date.now();
-                    ctx.response.dateTimeBody = ctx.response.dateTimeHeader;
-                    ctx.response.statusCode = response.statusCode;
-                    ctx.response.statusText = response.statusText;
-                    ctx.response.httpVersion = response.httpVersion;
-                    ctx.response.headers = response.headers;
-                    ctx.response.headersRaw = response.headersRaw;
-                  }
-                },
-                (error) => {
-                  ctx.error = error;
-                  if (!state.isResponsed) {
-                    doResponseError();
-                  }
-                },
-              );
-          }
-          if (onChunkIncoming) {
-            onChunkIncoming(ctx, chunk);
-          }
-        },
-        onOutgoing: (chunk) => {
-          if (onChunkOutgoing) {
-            onChunkOutgoing(ctx, chunk);
-          }
-        },
-        onClose: () => {
-          ctx.response.dateTimeEnd = Date.now();
-          if (state.isResponsed) {
-            if (onHttpResponseEnd) {
-              onHttpResponseEnd(ctx);
-            }
-          } else {
-            ctx.error = createError(502);
-            if (onHttpError) {
-              attachResponseError(ctx);
-              onHttpError(ctx);
-            }
-          }
-        },
-        onError: (error) => {
-          ctx.error = error;
-          if (!state.isResponsed && onHttpError) {
-            attachResponseError(ctx);
-            onHttpError(ctx);
-          }
-        },
+          }));
+          ctx.requestForward.timeOnRequestSend = calcTime();
+          ctx.requestForward.timeOnRequestEnd = ctx.requestForward.timeOnRequestSend;
+        }
       },
-    );
-  }
+      onIncoming: (chunk) => {
+        if (ctx.requestForward.timeOnResponse === null) {
+          ctx.requestForward.timeOnResponse = calcTime();
+        }
+        if (!state.isResponsed) {
+          state.decode(chunk)
+            .then(
+              (response) => {
+                if (response.complete) {
+                  state.isResponsed = true;
+                  ctx.requestForward.timeOnResponseEnd = calcTime();
+                  ctx.requestForward.timeOnResponseBody = ctx.requestForward.timeOnResponseEnd;
+                }
+              },
+              (error) => {
+                ctx.error = error;
+                if (!state.isResponsed) {
+                  attachResponseError(ctx);
+                  if (onHttpError) {
+                    onHttpError(ctx);
+                  } else {
+                    console.error(ctx.error);
+                  }
+                  if (ctx.socket.writable) {
+                    ctx.socket.end(encodeHttp(ctx.response));
+                  }
+                }
+              },
+            );
+        }
+        if (onChunkIncoming) {
+          onChunkIncoming(ctx, chunk);
+        }
+      },
+      onOutgoing: (chunk) => {
+        if (onChunkOutgoing) {
+          onChunkOutgoing(ctx, chunk);
+        }
+      },
+      onClose: () => {
+        if (!state.isResponsed) {
+          throw new Error('socket close error');
+        }
+        ctx.requestForward.timeOnResponseEnd = calcTime();
+        if (onHttpResponseEnd) {
+          onHttpResponseEnd(ctx);
+        }
+      },
+      onError: (error) => {
+        ctx.error = error;
+        if (onHttpResponseEnd) {
+          onHttpResponseEnd(ctx);
+        }
+      },
+    },
+  );
 };
