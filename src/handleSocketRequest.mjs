@@ -162,22 +162,23 @@ export default ({
             assert(ctx.request.body.readable);
 
             const streamThrottle = () => {
-              const handleBodyOnPause = () => {
+              const handleRequestBodyOnPause = () => {
                 if (!controller.signal.aborted) {
                   state.connector.pause();
                 }
               };
 
-              const handleBodyOnResume = () => {
+              const handleRequestBodyOnResume = () => {
                 if (!controller.signal.aborted) {
                   state.connector.resume();
                 }
               };
-              ctx.request.body.on('pause', handleBodyOnPause);
-              ctx.request.body.on('resume', handleBodyOnResume);
+              ctx.request.body.on('pause', handleRequestBodyOnPause);
+              ctx.request.body.on('resume', handleRequestBodyOnResume);
+              // ctx.request.body.on('drain', handleBodyOnDrain);
               return () => {
-                ctx.request.body.off('pause', handleBodyOnPause);
-                ctx.request.body.off('resume', handleBodyOnResume);
+                ctx.request.body.off('pause', handleRequestBodyOnPause);
+                ctx.request.body.off('resume', handleRequestBodyOnResume);
               };
             };
 
@@ -214,7 +215,10 @@ export default ({
           if (ctx.onRequest) {
             ctx.request.body = ctx.request.body ? Buffer.concat([ctx.request.body, chunk]) : chunk;
           } else {
-            ctx.request.body.write(chunk);
+            const ret = ctx.request.body.write(chunk);
+            if (ret === false) {
+              // state.connector.pause();
+            }
           }
         }
       },
