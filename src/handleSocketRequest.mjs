@@ -217,7 +217,7 @@ export default ({
           } else {
             const ret = ctx.request.body.write(chunk);
             if (ret === false) {
-              // state.connector.pause();
+              state.connector.pause();
             }
           }
         }

@@ -1,6 +1,8 @@
 import { PassThrough, Readable } from 'node:stream';
 import { test, mock } from 'node:test';
 import assert from 'node:assert';
+import _ from 'lodash';
+import { encodeHttp } from '@quanxiaoxiao/http-utils';
 import handleSocketRequest from './handleSocketRequest.mjs';
 
 const waitFor = async (t = 100) => {
@@ -82,7 +84,7 @@ test('handleSocketRequest', () => {
   }, 100);
 });
 
-test('handleSocketRequest with request body stream', () => {
+test('handleSocketRequest with request body stream 1', () => {
   const socket = new PassThrough();
   const requestBody = new PassThrough();
   const onHttpRequestHeader = mock.fn((ctx) => {
@@ -239,4 +241,52 @@ test('handleSocketRequest onHttpRequestHeader trigger error', () => {
     assert.equal(onHttpRequestHeader.mock.calls.length, 1);
     assert.equal(onHttpRequestEnd.mock.calls.length, 0);
   }, 500);
+});
+
+test('handleSocketRequest with request body stream 2', () => {
+  const socket = new PassThrough();
+  const requestBody = new PassThrough();
+  const onHttpError = mock.fn(() => {
+  });
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    assert.equal(ctx.request.body, null);
+    assert.deepEqual(ctx.request.headers, { name: 'quan', 'transfer-encoding': 'chunked' });
+    ctx.request.body = requestBody;
+  });
+  /*
+  requestBody.on('data', (chunk) => {
+    console.log(chunk);
+  });
+  requestBody.on('end', () => {
+    console.log('xxx');
+  });
+  */
+  const onHttpRequestEnd = mock.fn(() => {});
+  handleSocketRequest({
+    socket,
+    onHttpError,
+    onHttpRequestHeader,
+    onHttpRequestEnd,
+  });
+  const encode = encodeHttp({
+    headers: {
+      name: 'quan',
+    },
+    method: 'POST',
+  });
+  socket.write(encode('aaa'));
+  const count = 3000;
+  let i = 0;
+  const content = 'asdfasdfasdf asdfw';
+  setTimeout(() => {
+    const s = _.times(100).map(() => content).join('');
+    const tick = setInterval(() => {
+      socket.write(encode(`${s}:${i}`));
+      if (i >= count) {
+        clearInterval(tick);
+        socket.write(encode());
+      }
+      i++;
+    });
+  }, 100);
 });
