@@ -162,23 +162,12 @@ export default ({
             assert(ctx.request.body.readable);
 
             const streamThrottle = () => {
-              const handleRequestBodyOnPause = () => {
-                if (!controller.signal.aborted) {
-                  state.connector.pause();
-                }
+              const handleRequestBodyOnDrain = () => {
+                state.connection.resume();
               };
-
-              const handleRequestBodyOnResume = () => {
-                if (!controller.signal.aborted) {
-                  state.connector.resume();
-                }
-              };
-              ctx.request.body.on('pause', handleRequestBodyOnPause);
-              ctx.request.body.on('resume', handleRequestBodyOnResume);
-              // ctx.request.body.on('drain', handleBodyOnDrain);
+              ctx.request.body.on('drain', handleRequestBodyOnDrain);
               return () => {
-                ctx.request.body.off('pause', handleRequestBodyOnPause);
-                ctx.request.body.off('resume', handleRequestBodyOnResume);
+                ctx.request.body.off('drain', handleRequestBodyOnDrain);
               };
             };
 

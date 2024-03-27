@@ -130,8 +130,7 @@ test('handleSocketRequest with request body stream 1', () => {
     assert.equal(onHttpRequestEnd.mock.calls.length, 1);
     assert.equal(onHttpResponseEnd.mock.calls.length, 0);
     assert.equal(onHttpError.mock.calls.length, 0);
-    assert(requestBody.eventNames().includes('pause'));
-    assert(requestBody.eventNames().includes('resume'));
+    assert(requestBody.eventNames().includes('drain'));
     assert(requestBody.eventNames().includes('end'));
   }, 300);
 
