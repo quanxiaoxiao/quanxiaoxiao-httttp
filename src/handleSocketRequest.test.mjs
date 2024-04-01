@@ -242,14 +242,6 @@ test('handleSocketRequest with request body stream 2', () => {
     assert.deepEqual(ctx.request.headers, { name: 'quan', 'transfer-encoding': 'chunked' });
     ctx.request.body = requestBody;
   });
-  /*
-  requestBody.on('data', (chunk) => {
-    console.log(chunk);
-  });
-  requestBody.on('end', () => {
-    console.log('xxx');
-  });
-  */
   const onHttpRequestEnd = mock.fn(() => {});
   handleSocketRequest({
     socket,
@@ -278,4 +270,108 @@ test('handleSocketRequest with request body stream 2', () => {
       i++;
     });
   }, 100);
+});
+
+test('handleSocketRequest with request body stream 3', () => {
+  const socket = new PassThrough();
+  const requestBody = new PassThrough();
+  const onHttpError = mock.fn(() => {});
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    assert.equal(ctx.request.body, null);
+    assert.deepEqual(ctx.request.headers, { name: 'quan', 'transfer-encoding': 'chunked' });
+    ctx.request.body = requestBody;
+  });
+  const onHttpRequestEnd = mock.fn(() => {});
+  const handleRequestBodyOnData = mock.fn(() => {
+  });
+  requestBody.on('data', handleRequestBodyOnData);
+  handleSocketRequest({
+    socket,
+    onHttpError,
+    onHttpRequestHeader,
+    onHttpRequestEnd,
+  });
+  const encode = encodeHttp({
+    headers: {
+      name: 'quan',
+    },
+    method: 'POST',
+  });
+  socket.write(encode('aaa'));
+  setTimeout(() => {
+    assert(!requestBody.destroyed);
+    assert(requestBody.eventNames().includes('close'));
+    assert(requestBody.eventNames().includes('drain'));
+    assert(requestBody.eventNames().includes('error'));
+    socket.write(encode('cccee'));
+    assert(socket.eventNames().includes('data'));
+    assert(socket.eventNames().includes('close'));
+    assert(socket.eventNames().includes('drain'));
+    assert(socket.eventNames().includes('error'));
+    socket.destroy();
+  }, 100);
+  setTimeout(() => {
+    assert(requestBody.destroyed);
+    assert(!requestBody.eventNames().includes('error'));
+    assert(!requestBody.eventNames().includes('close'));
+    assert(!requestBody.eventNames().includes('drain'));
+    assert.equal(onHttpRequestEnd.mock.calls.length, 0);
+    assert.equal(onHttpError.mock.calls.length, 0);
+    assert.equal(handleRequestBodyOnData.mock.calls.length, 2);
+    assert.equal(handleRequestBodyOnData.mock.calls[0].arguments[0].toString(), 'aaa');
+    assert(!socket.eventNames().includes('data'));
+    assert(!socket.eventNames().includes('close'));
+    assert(!socket.eventNames().includes('drain'));
+    assert(!socket.eventNames().includes('error'));
+  }, 300);
+});
+
+test('handleSocketRequest with request body stream 4', () => {
+  const socket = new PassThrough();
+  const requestBody = new PassThrough();
+  const onHttpError = mock.fn((ctx) => {
+    assert(ctx.error instanceof Error);
+  });
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    assert.equal(ctx.request.body, null);
+    assert.deepEqual(ctx.request.headers, { name: 'quan', 'transfer-encoding': 'chunked' });
+    ctx.request.body = requestBody;
+  });
+  const onHttpRequestEnd = mock.fn(() => {});
+  const handleRequestBodyOnData = mock.fn(() => {
+  });
+  requestBody.on('data', handleRequestBodyOnData);
+  handleSocketRequest({
+    socket,
+    onHttpError,
+    onHttpRequestHeader,
+    onHttpRequestEnd,
+  });
+  const encode = encodeHttp({
+    headers: {
+      name: 'quan',
+    },
+    method: 'POST',
+  });
+  socket.write(encode('aaa'));
+  setTimeout(() => {
+    assert(!requestBody.destroyed);
+    assert(socket.eventNames().includes('close'));
+    assert(socket.eventNames().includes('data'));
+    assert(socket.eventNames().includes('drain'));
+    assert(socket.eventNames().includes('error'));
+    requestBody.destroy();
+  }, 100);
+
+  setTimeout(() => {
+    assert(!socket.eventNames().includes('close'));
+    assert(!socket.eventNames().includes('data'));
+    assert(!socket.eventNames().includes('drain'));
+    assert(!socket.eventNames().includes('error'));
+    assert(!requestBody.eventNames().includes('error'));
+    assert(!requestBody.eventNames().includes('close'));
+    assert(!requestBody.eventNames().includes('drain'));
+    assert.equal(onHttpRequestEnd.mock.calls.length, 0);
+    assert.equal(onHttpError.mock.calls.length, 1);
+  }, 300);
 });

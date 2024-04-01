@@ -170,7 +170,7 @@ export default ({
               },
               onError: (error) => {
                 if (!controller.signal.aborted) {
-                  ctx.error = error;
+                  ctx.error = new Error(`request body \`${error.message}\``);
                   doResponseError(ctx);
                 }
               },
