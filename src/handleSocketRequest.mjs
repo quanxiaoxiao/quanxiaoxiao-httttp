@@ -49,7 +49,9 @@ export default ({
       } catch (error) {
         console.warn(error);
       } finally {
-        controller.abort();
+        if (!controller.signal.aborted) {
+          controller.abort();
+        }
       }
     }
   };
@@ -270,7 +272,9 @@ export default ({
               state.ctx.error = error;
               doResponseError(state.ctx);
             } else {
+              console.error(error);
               state.connector();
+              controller.abort();
             }
           }
         },
