@@ -335,6 +335,7 @@ test('handleSocketRequest with request body stream 5', () => {
     assert(ctx.error instanceof Error);
     assert(/^request body/.test(ctx.error.message));
     assert(requestBody.destroyed);
+    assert.equal(ctx.response.statusCode, 500);
   });
   const onHttpRequestHeader = mock.fn((ctx) => {
     assert.equal(ctx.request.body, null);
