@@ -296,7 +296,8 @@ export default ({
         assert(!controller.signal.aborted);
         controller.abort();
       },
-      onError: () => {
+      onError: (error) => {
+        console.error(error);
         if (!controller.signal.aborted) {
           controller.abort();
         }

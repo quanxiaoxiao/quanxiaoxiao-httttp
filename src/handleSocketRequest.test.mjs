@@ -1,6 +1,7 @@
 import { PassThrough, Readable } from 'node:stream';
 import { test, mock } from 'node:test';
 import assert from 'node:assert';
+import createError from 'http-errors';
 import _ from 'lodash';
 import { encodeHttp } from '@quanxiaoxiao/http-utils';
 import handleSocketRequest from './handleSocketRequest.mjs';
@@ -143,6 +144,7 @@ test('handleSocketRequest with request body stream 1', () => {
 test('handleSocketRequest request chunk invalid', () => {
   const socket = new PassThrough();
   const onHttpError = mock.fn((ctx) => {
+    assert(ctx.error instanceof Error);
     assert.equal(ctx.response.statusCode, 400);
     assert(socket.eventNames().includes('data'));
     assert(socket.eventNames().includes('drain'));
@@ -326,6 +328,60 @@ test('handleSocketRequest with request body stream 3', () => {
   }, 300);
 });
 
+test('handleSocketRequest with request body stream 5', () => {
+  const socket = new PassThrough();
+  const requestBody = new PassThrough();
+  const onHttpError = mock.fn((ctx) => {
+    assert(ctx.error instanceof Error);
+    assert(/^request body/.test(ctx.error.message));
+    assert(requestBody.destroyed);
+  });
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    assert.equal(ctx.request.body, null);
+    assert.deepEqual(ctx.request.headers, { name: 'quan', 'transfer-encoding': 'chunked' });
+    ctx.request.body = requestBody;
+    ctx.response = {
+      headers: {
+        name: 'quan',
+      },
+      body: 'aaa',
+    };
+  });
+  const onHttpRequestEnd = mock.fn(() => {});
+  const handleRequestBodyOnData = mock.fn(() => {
+  });
+  requestBody.on('data', handleRequestBodyOnData);
+  handleSocketRequest({
+    socket,
+    onHttpError,
+    onHttpRequestHeader,
+    onHttpRequestEnd,
+  });
+  const encode = encodeHttp({
+    headers: {
+      name: 'quan',
+    },
+    method: 'POST',
+  });
+  socket.write(encode('aaa'));
+  setTimeout(() => {
+    assert(!requestBody.destroyed);
+    requestBody.end();
+  }, 100);
+
+  setTimeout(() => {
+    assert(!socket.eventNames().includes('close'));
+    assert(!socket.eventNames().includes('data'));
+    assert(!socket.eventNames().includes('drain'));
+    assert(!socket.eventNames().includes('error'));
+    assert(!requestBody.eventNames().includes('error'));
+    assert(!requestBody.eventNames().includes('close'));
+    assert(!requestBody.eventNames().includes('drain'));
+    assert.equal(onHttpRequestEnd.mock.calls.length, 0);
+    assert.equal(onHttpError.mock.calls.length, 1);
+  }, 300);
+});
+
 test('handleSocketRequest with request body stream 4', () => {
   const socket = new PassThrough();
   const requestBody = new PassThrough();
@@ -374,4 +430,42 @@ test('handleSocketRequest with request body stream 4', () => {
     assert.equal(onHttpRequestEnd.mock.calls.length, 0);
     assert.equal(onHttpError.mock.calls.length, 1);
   }, 300);
+});
+
+test('handleSocketRequest onHttpRequest trigger error', () => {
+  const socket = new PassThrough();
+  const onHttpRequestStartLine = mock.fn(() => {});
+  const onHttpError = mock.fn(() => {});
+
+  const onHttpRequest = mock.fn((ctx) => {
+    assert.equal(ctx.response, null);
+    assert.equal(ctx.error, null);
+    assert.deepEqual(ctx.request, {
+      connection: false,
+      method: null,
+      path: null,
+      httpVersion: null,
+      headersRaw: [],
+      headers: {},
+      body: null,
+      pathname: null,
+      querystring: '',
+      query: {},
+    });
+    throw createError(405);
+  });
+
+  handleSocketRequest({
+    socket,
+    onHttpRequestStartLine,
+    onHttpRequest,
+    onHttpError,
+  });
+  socket.write(Buffer.from('POST /aaa?name=bbb&big=foo HTTP/1.1\r\n'));
+  setTimeout(() => {
+    assert.equal(onHttpRequest.mock.calls.length, 1);
+    assert.equal(onHttpRequestStartLine.mock.calls.length, 0);
+    assert.equal(onHttpError.mock.calls.length, 0);
+    assert(socket.destroyed);
+  }, 200);
 });
