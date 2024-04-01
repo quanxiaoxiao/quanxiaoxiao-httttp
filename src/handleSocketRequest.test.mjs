@@ -129,25 +129,15 @@ test('handleSocketRequest with request body stream 1', () => {
     assert.equal(onHttpRequestHeader.mock.calls.length, 1);
     assert.equal(onHttpRequestEnd.mock.calls.length, 1);
     assert.equal(onHttpResponseEnd.mock.calls.length, 0);
+    assert(requestBody.writableEnded);
     assert.equal(onHttpError.mock.calls.length, 0);
-    assert(requestBody.eventNames().includes('drain'));
-    assert(requestBody.eventNames().includes('end'));
-  }, 300);
-
-  setTimeout(() => {
-    const handleData = mock.fn(() => {});
-
-    const handleEnd = mock.fn(() => {
-      assert.equal(handleData.mock.calls.length, 3);
-    });
-    requestBody.on('data', handleData);
-    requestBody.on('end', handleEnd);
+    const handleDataOnRequestBody = mock.fn(() => {});
+    requestBody.on('data', handleDataOnRequestBody);
     setTimeout(() => {
-      assert.equal(handleEnd.mock.calls.length, 1);
       assert.equal(onHttpError.mock.calls.length, 1);
-      assert.equal(onHttpResponseEnd.mock.calls.length, 0);
+      assert.equal(handleDataOnRequestBody.mock.calls.length, 3);
     }, 100);
-  }, 500);
+  }, 300);
 });
 
 test('handleSocketRequest request chunk invalid', () => {

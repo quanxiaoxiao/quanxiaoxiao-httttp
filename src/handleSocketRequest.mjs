@@ -1,12 +1,12 @@
 /* eslint no-use-before-define: 0 */
 import { Buffer } from 'node:buffer';
-import process from 'node:process';
 import qs from 'node:querystring';
 import assert from 'node:assert';
 import { PassThrough } from 'node:stream';
 import createError from 'http-errors';
 import { createConnector } from '@quanxiaoxiao/socket';
 import { decodeHttpRequest, encodeHttp } from '@quanxiaoxiao/http-utils';
+import { wrapStreamWrite } from '@quanxiaoxiao/node-utils';
 import forwardRequest from './forwardRequest.mjs';
 import forwardWebsocket from './forwardWebsocket.mjs';
 import attachResponseError from './attachResponseError.mjs';
@@ -141,7 +141,6 @@ export default ({
             assert(!controller.signal.aborted);
           }
           if (state.connector.detach()) {
-            controller.signal.removeEventListener('abort', handleAbortOnSignal);
             forwardWebsocket({
               ctx,
               onForwardConnect,
@@ -158,31 +157,29 @@ export default ({
             if (!ctx.request.body) {
               ctx.request.body = new PassThrough();
             }
-            assert(ctx.request.body.writable);
-            assert(ctx.request.body.readable);
-
-            const streamThrottle = () => {
-              const handleRequestBodyOnDrain = () => {
-                state.connection.resume();
-              };
-              ctx.request.body.on('drain', handleRequestBodyOnDrain);
-              return () => {
-                ctx.request.body.off('drain', handleRequestBodyOnDrain);
-              };
-            };
-
-            const throttle = streamThrottle();
-
-            if (ctx.requestForward) {
-              ctx.request.body.once('end', throttle);
-            } else {
-              ctx.request.body.once('end', () => {
-                throttle();
-                process.nextTick(() => {
-                  doResponse(ctx);
-                });
-              });
-            }
+            ctx.request._write = wrapStreamWrite({
+              stream: ctx.request.body,
+              signal: controller.signal,
+              onPause: () => {
+                state.connector.pause();
+              },
+              onDrain: () => {
+                state.connector.resume();
+              },
+              onError: (error) => {
+                if (!controller.signal.aborted) {
+                  ctx.error = error;
+                  doResponseError(ctx);
+                }
+              },
+              ...!ctx.requestForward ? {
+                onEnd: () => {
+                  process.nextTick(() => {
+                    doResponse(ctx);
+                  });
+                },
+              } : {},
+            });
           }
 
           if (ctx.requestForward) {
@@ -200,14 +197,12 @@ export default ({
         }
       },
       onBody: (chunk) => {
+        assert(!controller.signal.aborted);
         if (!ctx.request.connection) {
           if (ctx.onRequest) {
             ctx.request.body = ctx.request.body ? Buffer.concat([ctx.request.body, chunk]) : chunk;
           } else {
-            const ret = ctx.request.body.write(chunk);
-            if (ret === false) {
-              state.connector.pause();
-            }
+            ctx.request._write(chunk);
           }
         }
       },
@@ -227,8 +222,8 @@ export default ({
             } else {
               throw createError(503);
             }
-          } else if (ctx.request.body) {
-            ctx.request.body.end();
+          } else if (ctx.request._write) {
+            ctx.request._write();
           } else if (!ctx.requestForward) {
             doResponse(ctx);
           }
@@ -236,17 +231,6 @@ export default ({
       },
     });
   };
-
-  function handleAbortOnSignal() {
-    if (state.ctx
-      && state.ctx.request
-      && state.ctx.request.body
-      && state.ctx.request.body.pipe
-      && !state.ctx.request.body.destroyed
-    ) {
-      state.ctx.request.body.destroy();
-    }
-  }
 
   const check = () => {
     assert(!controller.signal.aborted);
@@ -316,6 +300,4 @@ export default ({
     },
     () => socket,
   );
-
-  controller.signal.addEventListener('abort', handleAbortOnSignal, { once: true });
 };
