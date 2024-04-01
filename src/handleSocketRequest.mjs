@@ -256,9 +256,18 @@ export default ({
         error: null,
       };
       if (onHttpRequest) {
-        onHttpRequest(state.ctx);
+        try {
+          onHttpRequest(state.ctx);
+        } catch (error) {
+          if (!controller.signal.aborted) {
+            state.ctx.error = error;
+            doResponseError(state.ctx);
+          }
+        }
       }
-      bindExcute(state.ctx);
+      if (!controller.signal.aborted) {
+        bindExcute(state.ctx);
+      }
     }
   };
 
@@ -285,7 +294,7 @@ export default ({
     {
       onData: (chunk) => {
         check();
-        if (chunk.length > 0) {
+        if (!controller.signal.aborted && chunk.length > 0) {
           if (onChunkOutgoing) {
             onChunkOutgoing(state.ctx, chunk);
           }

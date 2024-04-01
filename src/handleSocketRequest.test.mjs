@@ -436,7 +436,22 @@ test('handleSocketRequest with request body stream 4', () => {
 test('handleSocketRequest onHttpRequest trigger error', () => {
   const socket = new PassThrough();
   const onHttpRequestStartLine = mock.fn(() => {});
-  const onHttpError = mock.fn(() => {});
+  const onHttpError = mock.fn((ctx) => {
+    assert(ctx.error instanceof Error);
+    assert.deepEqual(ctx.request, {
+      connection: false,
+      method: null,
+      path: null,
+      httpVersion: null,
+      headersRaw: [],
+      headers: {},
+      body: null,
+      pathname: null,
+      querystring: '',
+      query: {},
+    });
+    assert.equal(ctx.response.statusCode, 405);
+  });
 
   const onHttpRequest = mock.fn((ctx) => {
     assert.equal(ctx.response, null);
@@ -466,7 +481,7 @@ test('handleSocketRequest onHttpRequest trigger error', () => {
   setTimeout(() => {
     assert.equal(onHttpRequest.mock.calls.length, 1);
     assert.equal(onHttpRequestStartLine.mock.calls.length, 0);
-    assert.equal(onHttpError.mock.calls.length, 0);
+    assert.equal(onHttpError.mock.calls.length, 1);
     assert(socket.destroyed);
   }, 200);
 });
