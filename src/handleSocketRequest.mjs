@@ -234,42 +234,39 @@ export default ({
     });
   };
 
-  const check = () => {
-    assert(!controller.signal.aborted);
-    if (!state.ctx) {
-      state.ctx = {
-        socket,
-        remoteAddress: clientAddress,
-        request: {
-          connection: false,
-          method: null,
-          path: null,
-          httpVersion: null,
-          headersRaw: [],
-          headers: {},
-          body: null,
-          pathname: null,
-          querystring: '',
-          query: {},
-        },
-        response: null,
-        error: null,
-      };
-      if (onHttpRequest) {
-        try {
-          onHttpRequest(state.ctx);
-          assert(state.ctx.response === null);
-        } catch (error) {
-          state.ctx.error = error;
-        }
+  const attachContext = () => {
+    state.ctx = {
+      socket,
+      remoteAddress: clientAddress,
+      request: {
+        connection: false,
+        method: null,
+        path: null,
+        httpVersion: null,
+        headersRaw: [],
+        headers: {},
+        body: null,
+        pathname: null,
+        querystring: '',
+        query: {},
+      },
+      response: null,
+      error: null,
+    };
+    if (onHttpRequest) {
+      try {
+        onHttpRequest(state.ctx);
+        assert(state.ctx.response === null);
+      } catch (error) {
+        state.ctx.error = error;
       }
-      if (state.ctx.error) {
-        if (!controller.signal.aborted) {
-          doResponseError(state.ctx);
-        }
-      } else if (!controller.signal.aborted) {
-        bindExcute(state.ctx);
+    }
+    if (state.ctx.error) {
+      if (!controller.signal.aborted) {
+        doResponseError(state.ctx);
       }
+    } else if (!controller.signal.aborted) {
+      bindExcute(state.ctx);
     }
   };
 
@@ -295,7 +292,10 @@ export default ({
   state.connector = createConnector(
     {
       onData: (chunk) => {
-        check();
+        assert(!controller.signal.aborted);
+        if (!state.ctx) {
+          attachContext();
+        }
         if (!controller.signal.aborted && chunk.length > 0) {
           if (onChunkOutgoing) {
             onChunkOutgoing(state.ctx, chunk);
