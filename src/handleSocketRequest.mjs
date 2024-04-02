@@ -275,7 +275,19 @@ export default ({
   const execute = (chunk) => {
     state.execute(chunk)
       .then(
-        () => {},
+        (ret) => {
+          if (ret.complete && ret.dataBuf.length > 0) {
+            if (!controller.signal.aborted) {
+              if (state.ctx) {
+                state.ctx.error = createError(400);
+                doResponseError(state.ctx);
+              } else {
+                state.connector();
+                controller.abort();
+              }
+            }
+          }
+        },
         (error) => {
           if (!controller.signal.aborted) {
             if (state.ctx) {
