@@ -258,14 +258,16 @@ export default ({
       if (onHttpRequest) {
         try {
           onHttpRequest(state.ctx);
+          assert(state.ctx.response === null);
         } catch (error) {
-          if (!controller.signal.aborted) {
-            state.ctx.error = error;
-            doResponseError(state.ctx);
-          }
+          state.ctx.error = error;
         }
       }
-      if (!controller.signal.aborted) {
+      if (state.ctx.error) {
+        if (!controller.signal.aborted) {
+          doResponseError(state.ctx);
+        }
+      } else if (!controller.signal.aborted) {
         bindExcute(state.ctx);
       }
     }
