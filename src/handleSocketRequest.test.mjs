@@ -823,7 +823,7 @@ test('handleSocketRequest request with no body, onHttpRequestEnd set response', 
   }, 1000);
 });
 
-test('handleSocketRequest onHttpRequest trigger error', { only: true }, () => {
+test('handleSocketRequest onHttpRequest trigger error', () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
   const onHttpRequestEnd = mock.fn(() => {});
