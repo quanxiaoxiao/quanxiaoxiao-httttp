@@ -70,9 +70,11 @@ export default ({
           onHttpResponseEnd(ctx);
         }
       } catch (error) {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && state.ctx) {
           ctx.error = error;
           doResponseError(ctx);
+        } else {
+          console.error(error);
         }
       }
     }
