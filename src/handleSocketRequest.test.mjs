@@ -310,7 +310,7 @@ test('handleSocketRequest with request body stream 2', () => {
   socket.write(encode('aaa'));
   const count = 3000;
   let i = 0;
-  const content = 'asdfasdfasdf asdfw';
+  const content = 'asdfasdfasdf 3333333';
   setTimeout(() => {
     const s = _.times(100).map(() => content).join('');
     const tick = setInterval(() => {
@@ -707,6 +707,8 @@ test('handleSocketRequest onRequest 3', () => {
 test('handleSocketRequest request with no body', () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
+  const onHttpRequestEnd = mock.fn(() => {});
+  const onHttpResponseEnd = mock.fn(() => {});
 
   const onHttpRequestHeader = mock.fn((ctx) => {
     assert.equal(ctx.request.pathname, '/aaa');
@@ -717,6 +719,8 @@ test('handleSocketRequest request with no body', () => {
       socket,
       onHttpRequestHeader,
       onHttpError,
+      onHttpRequestEnd,
+      onHttpResponseEnd,
     });
   });
   server.listen(port);
@@ -751,5 +755,7 @@ test('handleSocketRequest request with no body', () => {
     assert.equal(onError.mock.calls.length, 0);
     assert.equal(onData.mock.calls.length, 1);
     assert.equal(onHttpError.mock.calls.length, 1);
+    assert.equal(onHttpResponseEnd.mock.calls.length, 0);
+    assert.equal(onHttpRequestEnd.mock.calls.length, 1);
   }, 1000);
 });
