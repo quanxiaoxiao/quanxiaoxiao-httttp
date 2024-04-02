@@ -758,7 +758,7 @@ test('handleSocketRequest request with no body', () => {
   }, 1000);
 });
 
-test('handleSocketRequest request with no body, onHttpRequestEnd set response', { only: true }, () => {
+test('handleSocketRequest request with no body, onHttpRequestEnd set response', () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
   const onHttpRequestEnd = mock.fn((ctx) => {
@@ -820,5 +820,58 @@ test('handleSocketRequest request with no body, onHttpRequestEnd set response', 
     setTimeout(() => {
       server.close();
     }, 50);
+  }, 1000);
+});
+
+test('handleSocketRequest onHttpRequest trigger error', { only: true }, () => {
+  const port = getPort();
+  const onHttpError = mock.fn(() => {});
+  const onHttpRequestEnd = mock.fn(() => {});
+  const onHttpRequestHeader = mock.fn(() => {});
+  const onHttpRequest = mock.fn(() => {
+    throw createError(403);
+  });
+
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpRequest,
+      onHttpRequestHeader,
+      onHttpError,
+      onHttpRequestEnd,
+    });
+  });
+  server.listen(port);
+
+  const state = {
+    connector: null,
+  };
+
+  const onData = mock.fn((chunk) => {
+    assert(/^HTTP\/1\.1 403/.test(chunk.toString()));
+  });
+
+  const onClose = mock.fn(() => {});
+  const onError = mock.fn(() => {});
+
+  state.connector = createConnector(
+    {
+      onData,
+      onClose,
+      onError,
+    },
+    () => connect(port),
+  );
+
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
+
+  setTimeout(() => {
+    assert.equal(onClose.mock.calls.length, 1);
+    assert.equal(onError.mock.calls.length, 0);
+    assert.equal(onData.mock.calls.length, 1);
+    assert.equal(onHttpError.mock.calls.length, 1);
+    assert.equal(onHttpRequestHeader.mock.calls.length, 0);
+    assert.equal(onHttpRequestEnd.mock.calls.length, 0);
+    server.close();
   }, 1000);
 });
