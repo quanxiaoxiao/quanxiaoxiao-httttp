@@ -12,6 +12,11 @@ import forwardWebsocket from './forwardWebsocket.mjs';
 import attachResponseError from './attachResponseError.mjs';
 import generateResponse from './generateResponse.mjs';
 
+const promisee = async (fn, ...args) => {
+  const ret = await fn(...args);
+  return ret;
+};
+
 export default ({
   socket,
   onHttpRequest,
@@ -176,13 +181,28 @@ export default ({
                   doResponseError(ctx);
                 }
               },
-              ...!ctx.requestForward ? {
-                onEnd: () => {
-                  process.nextTick(() => {
+              onEnd: () => {
+                if (!ctx.requestForward) {
+                  if (onHttpRequestEnd) {
+                    promisee(onHttpRequestEnd, ctx)
+                      .then(
+                        () => {
+                          if (!controller.signal.aborted) {
+                            doResponse(ctx);
+                          }
+                        },
+                        (error) => {
+                          if (!controller.signal.aborted) {
+                            ctx.error = error;
+                            doResponseError(ctx);
+                          }
+                        },
+                      );
+                  } else {
                     doResponse(ctx);
-                  });
-                },
-              } : {},
+                  }
+                }
+              },
             });
           }
 
@@ -212,24 +232,26 @@ export default ({
       },
       onEnd: async () => {
         if (!ctx.request.connection) {
-          if (onHttpRequestEnd) {
-            await onHttpRequestEnd(ctx);
-            assert(!controller.signal.aborted);
-          }
-          if (ctx.onRequest) {
-            await ctx.onRequest(ctx);
-            assert(!controller.signal.aborted);
-            if (ctx.response) {
-              doResponse(ctx);
-            } else if (ctx.requestForward) {
-              await doForward(ctx);
-            } else {
-              throw createError(503);
-            }
-          } else if (ctx.request._write) {
+          if (ctx.request._write) {
             ctx.request._write();
-          } else if (!ctx.requestForward) {
-            doResponse(ctx);
+          } else {
+            if (onHttpRequestEnd) {
+              await onHttpRequestEnd(ctx);
+              assert(!controller.signal.aborted);
+            }
+            if (ctx.onRequest) {
+              await ctx.onRequest(ctx);
+              assert(!controller.signal.aborted);
+              if (ctx.response) {
+                doResponse(ctx);
+              } else if (ctx.requestForward) {
+                await doForward(ctx);
+              } else {
+                throw createError(503);
+              }
+            } else if (!ctx.requestForward) {
+              doResponse(ctx);
+            }
           }
         }
       },
