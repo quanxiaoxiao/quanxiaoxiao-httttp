@@ -141,7 +141,76 @@ test('handleSocketRequest', async () => {
   server.close();
 });
 
-test('handleSocketRequest request chunk invalid', { only: true }, async () => {
+test('handleSocketRequest request body stream close error', async () => {
+  const port = getPort();
+  const requestBody = new PassThrough();
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    ctx.request.body = requestBody;
+
+    setTimeout(() => {
+      assert(ctx.request.body.eventNames().includes('close'));
+      assert(ctx.request.body.eventNames().includes('drain'));
+    }, 100);
+
+    setTimeout(() => {
+      assert(!requestBody.destroyed);
+      requestBody.destroy();
+    }, 200);
+  });
+  const onHttpRequestEnd = mock.fn(() => {});
+  const onHttpResponseEnd = mock.fn(() => {});
+  const onHttpError = mock.fn((ctx) => {
+    assert(!ctx.request.body.eventNames().includes('close'));
+    assert(!ctx.request.body.eventNames().includes('drain'));
+  });
+
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpRequestHeader,
+      onHttpResponseEnd,
+      onHttpRequestEnd,
+      onHttpError,
+    });
+  });
+  server.listen(port);
+
+  const state = {
+    connector: null,
+  };
+
+  const onData = mock.fn((chunk) => {
+    assert(/^HTTP\/1.1 500/.test(chunk.toString()));
+  });
+  const onClose = mock.fn(() => {});
+  const onError = mock.fn(() => {});
+
+  state.connector = createConnector(
+    {
+      onData,
+      onClose,
+      onError,
+    },
+    () => connect(port),
+  );
+
+  state.connector.write(Buffer.from('POST /aaa?name=bbb&big=foo HTTP/1.1\r\n'));
+  state.connector.write(Buffer.from('Content-Length: 8\r\nName: quan\r\n\r\n'));
+  state.connector.write(Buffer.from('ab'));
+  await waitFor(100);
+  state.connector.write(Buffer.from('bbb'));
+  assert.equal(onData.mock.calls.length, 0);
+  await waitFor(300);
+  assert.equal(onHttpRequestHeader.mock.calls.length, 1);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 0);
+  assert.equal(onHttpError.mock.calls.length, 1);
+  assert.equal(onData.mock.calls.length, 1);
+  assert.equal(onClose.mock.calls.length, 1);
+  assert.equal(onError.mock.calls.length, 0);
+  server.close();
+});
+
+test('handleSocketRequest request chunk invalid', async () => {
   const port = getPort();
   const requestBody = new PassThrough();
   const onHttpRequestHeader = mock.fn((ctx) => {
