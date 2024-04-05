@@ -188,6 +188,10 @@ export default ({
                       .then(
                         () => {
                           assert(!ctx.onRequest);
+                        },
+                      )
+                      .then(
+                        () => {
                           if (!controller.signal.aborted) {
                             doResponse(ctx);
                           }
