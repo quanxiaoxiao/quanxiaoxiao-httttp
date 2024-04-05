@@ -195,6 +195,8 @@ export default ({
                           if (!controller.signal.aborted) {
                             ctx.error = error;
                             doResponseError(ctx);
+                          } else {
+                            console.error(error);
                           }
                         },
                       );
