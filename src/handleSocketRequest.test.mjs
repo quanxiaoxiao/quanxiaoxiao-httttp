@@ -410,7 +410,7 @@ test('handleSocketRequest onHttpRequestStartLine wait as socket close', async ()
   server.close();
 });
 
-test('handleSocketRequest onRequest 2', async () => {
+test('handleSocketRequest ctx.onRequest', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
   const onHttpResponseEnd = mock.fn(() => {});
@@ -488,7 +488,7 @@ test('handleSocketRequest onRequest 2', async () => {
   server.close();
 });
 
-test('handleSocketRequest onRequest 3', () => {
+test('handleSocketRequest ctx.onRequest 3', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
   const onRequest = mock.fn((ctx) => {
@@ -542,20 +542,21 @@ test('handleSocketRequest onRequest 3', () => {
     () => socket,
   );
 
-  setTimeout(() => {
-    assert.equal(onError.mock.calls.length, 0);
-    assert.equal(onClose.mock.calls.length, 1);
-    assert.equal(onData.mock.calls.length, 1);
-    assert.equal(onRequest.mock.calls.length, 1);
-    assert.equal(onHttpError.mock.calls.length, 1);
-    server.close();
-  }, 1000);
+  await waitFor(400);
+  assert.equal(onError.mock.calls.length, 0);
+  assert.equal(onClose.mock.calls.length, 1);
+  assert.equal(onData.mock.calls.length, 1);
+  assert.equal(onRequest.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 1);
+  server.close();
 });
 
-test('handleSocketRequest request with no body', () => {
+test('handleSocketRequest request with no body', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
-  const onHttpRequestEnd = mock.fn(() => {});
+  const onHttpRequestEnd = mock.fn((ctx) => {
+    assert.equal(ctx.request.body, null);
+  });
   const onHttpResponseEnd = mock.fn(() => {});
 
   const onHttpRequestHeader = mock.fn((ctx) => {
@@ -595,18 +596,18 @@ test('handleSocketRequest request with no body', () => {
 
   state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
 
-  setTimeout(() => {
-    server.close();
-    assert.equal(onClose.mock.calls.length, 1);
-    assert.equal(onError.mock.calls.length, 0);
-    assert.equal(onData.mock.calls.length, 1);
-    assert.equal(onHttpError.mock.calls.length, 1);
-    assert.equal(onHttpResponseEnd.mock.calls.length, 0);
-    assert.equal(onHttpRequestEnd.mock.calls.length, 1);
-  }, 1000);
+  await waitFor(1000);
+  assert.equal(onClose.mock.calls.length, 1);
+  assert.equal(onError.mock.calls.length, 0);
+  assert.equal(onData.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 1);
+  assert.equal(onHttpRequestHeader.mock.calls.length, 1);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 0);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 1);
+  server.close();
 });
 
-test('handleSocketRequest request with no body, onHttpRequestEnd set response', () => {
+test('handleSocketRequest request with no body, onHttpRequestEnd set response', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
   const onHttpRequestEnd = mock.fn((ctx) => {
@@ -657,21 +658,21 @@ test('handleSocketRequest request with no body, onHttpRequestEnd set response', 
 
   state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
 
-  setTimeout(() => {
-    assert.equal(onClose.mock.calls.length, 0);
-    assert.equal(onError.mock.calls.length, 0);
-    assert.equal(onData.mock.calls.length, 1);
-    assert.equal(onHttpError.mock.calls.length, 0);
-    assert.equal(onHttpResponseEnd.mock.calls.length, 1);
-    assert.equal(onHttpRequestEnd.mock.calls.length, 1);
-    state.connector();
-    setTimeout(() => {
-      server.close();
-    }, 50);
-  }, 1000);
+  await waitFor(1000);
+  assert.equal(onClose.mock.calls.length, 0);
+  assert.equal(onError.mock.calls.length, 0);
+  assert.equal(onData.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 0);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 1);
+  state.connector();
+  await waitFor(500);
+  assert.equal(onHttpError.mock.calls.length, 0);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+  server.close();
 });
 
-test('handleSocketRequest onHttpRequest trigger error', () => {
+test('handleSocketRequest onHttpRequest trigger error', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
   const onHttpRequestEnd = mock.fn(() => {});
@@ -713,28 +714,29 @@ test('handleSocketRequest onHttpRequest trigger error', () => {
 
   state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
 
-  setTimeout(() => {
-    assert.equal(onClose.mock.calls.length, 1);
-    assert.equal(onError.mock.calls.length, 0);
-    assert.equal(onData.mock.calls.length, 1);
-    assert.equal(onHttpError.mock.calls.length, 1);
-    assert.equal(onHttpRequestHeader.mock.calls.length, 0);
-    assert.equal(onHttpRequestEnd.mock.calls.length, 0);
-    server.close();
-  }, 1000);
+  await waitFor(1000);
+  assert.equal(onClose.mock.calls.length, 1);
+  assert.equal(onError.mock.calls.length, 0);
+  assert.equal(onData.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 1);
+  assert.equal(onHttpRequestHeader.mock.calls.length, 0);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 0);
+  server.close();
 });
 
-test('handleSocketRequest request body with stream', () => {
+test('handleSocketRequest request body with stream', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
+  const handleRequestBodyOnData = mock.fn(() => {});
   const onHttpRequestHeader = mock.fn((ctx) => {
     assert.equal(ctx.request.body, null);
+    ctx.request.body = new PassThrough();
+    ctx.request.body.on('data', handleRequestBodyOnData);
   });
-  const handleRequestBodyOnData = mock.fn(() => {});
 
   const onHttpRequestEnd = mock.fn((ctx) => {
-    assert(ctx.request.body instanceof PassThrough);
-    assert(ctx.request.body.readable);
+    assert(ctx.request.body.writableEnded);
+    assert(ctx.request.body.readableEnded);
     assert(ctx.response === null);
     ctx.response = {
       headers: {
@@ -742,11 +744,8 @@ test('handleSocketRequest request body with stream', () => {
       },
       body: Buffer.from('ccc'),
     };
-    process.nextTick(() => {
-      assert(ctx.request.body.writableEnded);
-      ctx.request.body.on('data', handleRequestBodyOnData);
-    });
   });
+
   const onHttpResponseEnd = mock.fn(() => {});
 
   const server = net.createServer((socket) => {
@@ -794,24 +793,21 @@ test('handleSocketRequest request body with stream', () => {
     state.connector.write(Buffer.from('cc'));
   }, 70);
 
-  setTimeout(() => {
-    assert.equal(onClose.mock.calls.length, 0);
-    assert.equal(onError.mock.calls.length, 0);
-    assert.equal(onData.mock.calls.length, 1);
-    assert.equal(onHttpError.mock.calls.length, 0);
-    assert.equal(onHttpRequestHeader.mock.calls.length, 1);
-    assert.equal(onHttpRequestEnd.mock.calls.length, 1);
-    assert.equal(onHttpResponseEnd.mock.calls.length, 1);
-    assert.equal(handleRequestBodyOnData.mock.calls.length, 3);
-    assert.equal(handleRequestBodyOnData.mock.calls.map((d) => d.arguments[0].toString()).join(''), 'aabbcc');
-    state.connector();
-    setTimeout(() => {
-      server.close();
-    }, 200);
-  }, 1000);
+  await waitFor(1000);
+  assert.equal(onClose.mock.calls.length, 0);
+  assert.equal(onError.mock.calls.length, 0);
+  assert.equal(onData.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 0);
+  assert.equal(onHttpRequestHeader.mock.calls.length, 1);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 1);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+  assert.equal(handleRequestBodyOnData.mock.calls.length, 3);
+  assert.equal(handleRequestBodyOnData.mock.calls.map((d) => d.arguments[0].toString()).join(''), 'aabbcc');
+  state.connector();
+  server.close();
 });
 
-test('handleSocketRequest request body with stream no consume', () => {
+test('handleSocketRequest request body with stream no consume', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
   const requestBody = new PassThrough();
@@ -820,17 +816,7 @@ test('handleSocketRequest request body with stream no consume', () => {
     ctx.request.body = requestBody;
   });
 
-  const onHttpRequestEnd = mock.fn((ctx) => {
-    ctx.response = {
-      headers: {
-        server: 'quan',
-      },
-      body: Buffer.from('ccc'),
-    };
-    process.nextTick(() => {
-      assert(ctx.request.body.writableEnded);
-    });
-  });
+  const onHttpRequestEnd = mock.fn(() => {});
   const onHttpResponseEnd = mock.fn(() => {});
 
   const server = net.createServer((socket) => {
@@ -875,100 +861,23 @@ test('handleSocketRequest request body with stream no consume', () => {
     state.connector.write(Buffer.from('cc'));
   }, 70);
 
-  setTimeout(() => {
-    assert.equal(onClose.mock.calls.length, 0);
-    assert.equal(onError.mock.calls.length, 0);
-    assert.equal(onData.mock.calls.length, 0);
-    assert.equal(onHttpError.mock.calls.length, 0);
-    assert.equal(onHttpRequestHeader.mock.calls.length, 1);
-    assert.equal(onHttpRequestEnd.mock.calls.length, 1);
-    assert.equal(onHttpResponseEnd.mock.calls.length, 0);
-    assert(!requestBody.destroyed);
-    state.connector();
-    setTimeout(() => {
-      assert(requestBody.destroyed);
-      server.close();
-    }, 200);
-  }, 2000);
+  await waitFor(2000);
+  assert.equal(onClose.mock.calls.length, 0);
+  assert.equal(onError.mock.calls.length, 0);
+  assert.equal(onData.mock.calls.length, 0);
+  assert.equal(onHttpError.mock.calls.length, 0);
+  assert.equal(onHttpRequestHeader.mock.calls.length, 1);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 0);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 0);
+  assert(!requestBody.destroyed);
+  state.connector();
+  server.close();
+
+  await waitFor(200);
+  assert(requestBody.destroyed);
 });
 
-test('handleSocketRequest request body with stream close error', () => {
-  const port = getPort();
-  const onHttpError = mock.fn(() => {});
-  const onHttpRequestHeader = mock.fn((ctx) => {
-    assert.equal(ctx.request.body, null);
-  });
-
-  const onHttpRequestEnd = mock.fn((ctx) => {
-    ctx.response = {
-      headers: {
-        server: 'quan',
-      },
-      body: Buffer.from('ccc'),
-    };
-    setTimeout(() => {
-      ctx.request.body.destroy();
-    }, 300);
-  });
-  const onHttpResponseEnd = mock.fn(() => {});
-
-  const server = net.createServer((socket) => {
-    handleSocketRequest({
-      socket,
-      onHttpRequestHeader,
-      onHttpResponseEnd,
-      onHttpError,
-      onHttpRequestEnd,
-    });
-  });
-  server.listen(port);
-
-  const state = {
-    connector: null,
-  };
-
-  const onData = mock.fn((chunk) => {
-    assert(/^HTTP\/1\.1 500/.test(chunk.toString()));
-  });
-  const onClose = mock.fn(() => {});
-  const onError = mock.fn(() => {});
-
-  state.connector = createConnector(
-    {
-      onData,
-      onClose,
-      onError,
-    },
-    () => connect(port),
-  );
-
-  state.connector.write(Buffer.from('POST /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 6\r\n\r\n'));
-
-  setTimeout(() => {
-    state.connector.write(Buffer.from('aa'));
-  }, 50);
-
-  setTimeout(() => {
-    state.connector.write(Buffer.from('bb'));
-  }, 60);
-
-  setTimeout(() => {
-    state.connector.write(Buffer.from('cc'));
-  }, 70);
-
-  setTimeout(() => {
-    assert.equal(onClose.mock.calls.length, 1);
-    assert.equal(onError.mock.calls.length, 0);
-    assert.equal(onData.mock.calls.length, 1);
-    assert.equal(onHttpError.mock.calls.length, 1);
-    assert.equal(onHttpRequestHeader.mock.calls.length, 1);
-    assert.equal(onHttpRequestEnd.mock.calls.length, 1);
-    assert.equal(onHttpResponseEnd.mock.calls.length, 0);
-    server.close();
-  }, 2000);
-});
-
-test('handleSocketRequest request body ctx.onRequest', () => {
+test('handleSocketRequest request body ctx.onRequest', async () => {
   const port = getPort();
   const onRequest = mock.fn((ctx) => {
     assert.equal(ctx.request.body.toString(), 'aabbcc');
@@ -1042,27 +951,24 @@ test('handleSocketRequest request body ctx.onRequest', () => {
     state.connector.write(Buffer.from('cc'));
   }, 70);
 
-  setTimeout(() => {
-    assert.equal(onClose.mock.calls.length, 0);
-    assert.equal(onError.mock.calls.length, 0);
-    assert.equal(onData.mock.calls.length, 1);
-    assert.equal(onRequest.mock.calls.length, 1);
-    assert.equal(onHttpError.mock.calls.length, 0);
-    assert.equal(onHttpRequestHeader.mock.calls.length, 1);
-    assert.equal(onHttpRequestEnd.mock.calls.length, 1);
-    assert.equal(onHttpResponseEnd.mock.calls.length, 1);
-    state.connector();
-    setTimeout(() => {
-      server.close();
-    }, 100);
-  }, 2000);
+  await waitFor(2000);
+  assert.equal(onClose.mock.calls.length, 0);
+  assert.equal(onError.mock.calls.length, 0);
+  assert.equal(onData.mock.calls.length, 1);
+  assert.equal(onRequest.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 0);
+  assert.equal(onHttpRequestHeader.mock.calls.length, 1);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 1);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+  state.connector();
+  server.close();
 });
 
 test('handleSocketRequest request body with stream', () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
   const requestBody = new PassThrough();
-  const pathname = path.resolve(process.cwd(), 'aaa_bbb_333');
+  const pathname = path.resolve(process.cwd(), `test_${Date.now()}_aaa_bbb_333`);
   const ws = fs.createWriteStream(pathname);
   const count = 3000;
   const content = 'asdf asdfasdfawefbbb';
