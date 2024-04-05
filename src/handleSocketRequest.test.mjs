@@ -410,7 +410,7 @@ test('handleSocketRequest onHttpRequestStartLine wait as socket close', async ()
   server.close();
 });
 
-test('handleSocketRequest ctx.onRequest', async () => {
+test('handleSocketRequest ctx.onRequest with request body, bind at onHttpRequestHeader', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
   const onHttpResponseEnd = mock.fn(() => {});
@@ -488,7 +488,7 @@ test('handleSocketRequest ctx.onRequest', async () => {
   server.close();
 });
 
-test('handleSocketRequest ctx.onRequest 3', async () => {
+test('handleSocketRequest ctx.onRequest  with request body, unbind response', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
   const onRequest = mock.fn((ctx) => {
@@ -1117,7 +1117,9 @@ test('handleSocketRequest ctx.onResponse', async () => {
     });
   });
   server.listen(port);
-  const onData = mock.fn(() => {});
+  const onData = mock.fn((chunk) => {
+    assert(/^HTTP\/1\.1 200/.test(chunk.toString()));
+  });
   const onClose = mock.fn(() => {});
   const onError = mock.fn(() => {});
   const state = {
@@ -1139,7 +1141,7 @@ test('handleSocketRequest ctx.onResponse', async () => {
 
   assert.equal(onClose.mock.calls.length, 0);
   assert.equal(onError.mock.calls.length, 0);
-  assert.equal(onData.mock.calls.length, 0);
+  assert.equal(onData.mock.calls.length, 1);
   assert.equal(onHttpRequestEnd.mock.calls.length, 1);
   assert.equal(onHttpResponseEnd.mock.calls.length, 1);
   assert.equal(onHttpError.mock.calls.length, 0);
@@ -1149,7 +1151,7 @@ test('handleSocketRequest ctx.onResponse', async () => {
   server.close();
 });
 
-test('handleSocketRequest ctx.onResponse trigger error', { only: true }, async () => {
+test('handleSocketRequest ctx.onResponse trigger error', async () => {
   const port = getPort();
   const onHttpError = mock.fn((ctx) => {
     assert.equal(ctx.error.statusCode, 401);
