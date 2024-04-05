@@ -1070,3 +1070,80 @@ test('handleSocketRequest request body with stream', () => {
     walk();
   }, 100);
 });
+
+test('handleSocketRequest ctx.onResponse', { only: true }, async () => {
+  const port = getPort();
+  const onHttpError = mock.fn(() => {});
+  const onHttpResponseEnd = mock.fn((ctx) => {
+    assert.deepEqual(ctx.response, {
+      headers: {
+        name: 'rice',
+      },
+      body: 'foo',
+    });
+  });
+  const onResponse = mock.fn((ctx) => {
+    assert.equal(onHttpResponseEnd.mock.calls.length, 0);
+    assert.deepEqual(ctx.response, {
+      headers: {
+        name: 'quan',
+      },
+      body: 'aaa',
+    });
+    ctx.response = {
+      headers: {
+        name: 'rice',
+      },
+      body: 'foo',
+    };
+  });
+  const onHttpRequestEnd = mock.fn((ctx) => {
+    assert.equal(ctx.response, null);
+    assert.equal(typeof ctx.onResponse, 'undefined');
+    ctx.onResponse = onResponse;
+    ctx.response = {
+      headers: {
+        name: 'quan',
+      },
+      body: 'aaa',
+    };
+  });
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpResponseEnd,
+      onHttpRequestEnd,
+      onHttpError,
+    });
+  });
+  server.listen(port);
+  const onData = mock.fn(() => {});
+  const onClose = mock.fn(() => {});
+  const onError = mock.fn(() => {});
+  const state = {
+    connector: null,
+  };
+
+  state.connector = createConnector(
+    {
+      onData,
+      onClose,
+      onError,
+    },
+    () => connect(port),
+  );
+
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
+
+  await waitFor(1000);
+
+  assert.equal(onClose.mock.calls.length, 0);
+  assert.equal(onError.mock.calls.length, 0);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 1);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 0);
+  assert.equal(onResponse.mock.calls.length, 1);
+
+  state.connector();
+  server.close();
+});

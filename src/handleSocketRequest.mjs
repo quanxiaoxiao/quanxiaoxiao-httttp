@@ -177,7 +177,7 @@ export default ({
               },
               onError: (error) => {
                 if (!controller.signal.aborted) {
-                  ctx.error = new Error(`request body \`${error.message}\``);
+                  ctx.error = new Error(`request body stream, \`${error.message}\``);
                   doResponseError(ctx);
                 }
               },
@@ -286,9 +286,7 @@ export default ({
       }
     }
     if (state.ctx.error) {
-      if (!controller.signal.aborted) {
-        doResponseError(state.ctx);
-      }
+      doResponseError(state.ctx);
     } else if (!controller.signal.aborted) {
       bindExcute(state.ctx);
     }
