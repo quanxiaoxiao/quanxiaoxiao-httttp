@@ -1071,7 +1071,7 @@ test('handleSocketRequest request body with stream', () => {
   }, 100);
 });
 
-test('handleSocketRequest ctx.onResponse', { only: true }, async () => {
+test('handleSocketRequest ctx.onResponse', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
   const onHttpResponseEnd = mock.fn((ctx) => {
@@ -1139,11 +1139,65 @@ test('handleSocketRequest ctx.onResponse', { only: true }, async () => {
 
   assert.equal(onClose.mock.calls.length, 0);
   assert.equal(onError.mock.calls.length, 0);
+  assert.equal(onData.mock.calls.length, 0);
   assert.equal(onHttpRequestEnd.mock.calls.length, 1);
   assert.equal(onHttpResponseEnd.mock.calls.length, 1);
   assert.equal(onHttpError.mock.calls.length, 0);
   assert.equal(onResponse.mock.calls.length, 1);
 
   state.connector();
+  server.close();
+});
+
+test('handleSocketRequest ctx.onResponse trigger error', { only: true }, async () => {
+  const port = getPort();
+  const onHttpError = mock.fn((ctx) => {
+    assert.equal(ctx.error.statusCode, 401);
+    assert.equal(ctx.response.statusCode, 401);
+  });
+  const onHttpResponseEnd = mock.fn(() => {});
+  const onResponse = mock.fn(async () => {
+    assert.equal(onHttpError.mock.calls.length, 0);
+    await waitFor(200);
+    throw createError(401);
+  });
+  const onHttpRequestEnd = mock.fn((ctx) => {
+    ctx.onResponse = onResponse;
+  });
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpResponseEnd,
+      onHttpRequestEnd,
+      onHttpError,
+    });
+  });
+  server.listen(port);
+  const onData = mock.fn((chunk) => {
+    assert(/^HTTP\/1.1 401/.test(chunk.toString()));
+  });
+  const onClose = mock.fn(() => {});
+  const onError = mock.fn(() => {});
+  const state = {
+    connector: null,
+  };
+  state.connector = createConnector(
+    {
+      onData,
+      onClose,
+      onError,
+    },
+    () => connect(port),
+  );
+
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
+
+  await waitFor(1000);
+  assert.equal(onClose.mock.calls.length, 1);
+  assert.equal(onError.mock.calls.length, 0);
+  assert.equal(onData.mock.calls.length, 1);
+  assert.equal(onResponse.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 1);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 0);
   server.close();
 });
