@@ -477,11 +477,11 @@ test('handleSocketRequest ctx.onRequest with request body, bind at onHttpRequest
     () => connect(port),
   );
   await waitFor(1500);
+  assert.equal(onHttpError.mock.calls.length, 0);
   assert.equal(onError.mock.calls.length, 0);
   assert.equal(onClose.mock.calls.length, 0);
   assert.equal(onData.mock.calls.length, 1);
   assert.equal(onRequest.mock.calls.length, 1);
-  assert.equal(onHttpError.mock.calls.length, 0);
   assert.equal(onHttpRequestEnd.mock.calls.length, 1);
   assert.equal(onHttpResponseEnd.mock.calls.length, 1);
   state.connector();
@@ -625,7 +625,7 @@ test('handleSocketRequest request with no body ctx.onRequest', async () => {
   server.close();
 });
 
-test('handleSocketRequest request with no body, error with onHttpRequestEnd set ctx.onRequest', { only: true }, async () => {
+test('handleSocketRequest request with no body, error with onHttpRequestEnd set ctx.onRequest', async () => {
   const port = getPort();
   const onRequest = mock.fn(() => {});
   const onHttpError = mock.fn(() => {});
@@ -677,7 +677,9 @@ test('handleSocketRequest request with no body, error with onHttpRequestEnd set 
 
 test('handleSocketRequest request with no body', async () => {
   const port = getPort();
-  const onHttpError = mock.fn(() => {});
+  const onHttpError = mock.fn((ctx) => {
+    console.log(ctx.error);
+  });
   const onHttpRequestEnd = mock.fn((ctx) => {
     assert.equal(ctx.request.body, null);
   });

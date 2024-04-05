@@ -239,10 +239,10 @@ export default ({
             ctx.request._write();
           } else {
             if (onHttpRequestEnd) {
-              const isOnResponseUnbind = ctx.onRequest === null;
+              const isOnResponseUnbind = ctx.onRequest == null;
               await onHttpRequestEnd(ctx);
-              if (!isOnResponseUnbind) {
-                assert(ctx.onRequest === null);
+              if (isOnResponseUnbind) {
+                assert(ctx.onRequest == null);
               }
               assert(!controller.signal.aborted);
             }
