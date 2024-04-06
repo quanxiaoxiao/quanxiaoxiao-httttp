@@ -1,4 +1,3 @@
-/* eslint no-use-before-define: 0 */
 import { Buffer } from 'node:buffer';
 import qs from 'node:querystring';
 import assert from 'node:assert';
@@ -246,10 +245,10 @@ export default ({
             if (onHttpRequestEnd) {
               const isOnResponseUnbind = !Object.hasOwnProperty.call(ctx, 'onRequest');
               await onHttpRequestEnd(ctx);
+              assert(!controller.signal.aborted);
               if (isOnResponseUnbind) {
                 assert(!Object.hasOwnProperty.call(ctx, 'onRequest'));
               }
-              assert(!controller.signal.aborted);
             }
             if (ctx.onRequest) {
               await ctx.onRequest(ctx);
