@@ -1388,3 +1388,87 @@ test('handleSocketRequest ctx.onResponse trigger error', async () => {
   assert.equal(onHttpResponseEnd.mock.calls.length, 0);
   server.close();
 });
+
+test('handleSocketRequest POST and GET', async () => {
+  const port = getPort();
+  const onHttpError = mock.fn(() => {});
+  const onHttpRequestEnd = mock.fn((ctx) => {
+    assert.equal(ctx.response, null);
+    if (ctx.request.method === 'GET') {
+      assert.equal(ctx.request.body, null);
+      assert(!Object.hasOwnProperty.call(ctx.request, '_write'));
+    } else if (ctx.request.method === 'POST') {
+      assert(Object.hasOwnProperty.call(ctx.request, '_write'));
+    }
+    if (ctx.request.method === 'GET') {
+      ctx.response = {
+        headers: {
+          name: 'quan',
+        },
+        body: 'abc',
+      };
+    } else if (ctx.request.method === 'POST') {
+      ctx.response = {
+        headers: {
+          name: 'quan',
+        },
+        body: 'efg',
+      };
+    }
+  });
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    if (ctx.request.method === 'POST') {
+      setTimeout(() => {
+        assert.equal(onHttpRequestEnd.mock.calls.length, 1);
+        ctx.request.body.on('data', () => {});
+        setTimeout(() => {
+          assert.equal(onHttpRequestEnd.mock.calls.length, 2);
+        }, 100);
+      }, 100);
+    }
+  });
+
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpRequestHeader,
+      onHttpRequestEnd,
+      onHttpError,
+    });
+  });
+  server.listen(port);
+
+  const state = {
+    connector: null,
+  };
+
+  const onData = mock.fn(() => {});
+  const onClose = mock.fn(() => {});
+  const onError = mock.fn(() => {});
+
+  state.connector = createConnector(
+    {
+      onData,
+      onClose,
+      onError,
+    },
+    () => connect(port),
+  );
+
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
+
+  setTimeout(() => {
+    state.connector.write(Buffer.from('POST /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 3\r\n\r\naaa'));
+  }, 1000);
+
+  await waitFor(2000);
+  assert.equal(onHttpRequestHeader.mock.calls.length, 2);
+  assert.equal(onData.mock.calls.length, 2);
+  assert.equal(onClose.mock.calls.length, 0);
+  assert.equal(onError.mock.calls.length, 0);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 2);
+  assert(onData.mock.calls[0].arguments[0].toString().includes('abc'));
+  assert(onData.mock.calls[1].arguments[0].toString().includes('efg'));
+  state.connector();
+  server.close();
+});
