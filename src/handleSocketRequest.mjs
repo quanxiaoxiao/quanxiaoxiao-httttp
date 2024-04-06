@@ -187,7 +187,7 @@ export default ({
                     promisee(onHttpRequestEnd, ctx)
                       .then(
                         () => {
-                          assert(!ctx.onRequest);
+                          assert(!Object.hasOwnProperty.call(ctx, 'onRequest'));
                         },
                       )
                       .then(
@@ -230,7 +230,8 @@ export default ({
       onBody: (chunk) => {
         assert(!controller.signal.aborted);
         if (!ctx.request.connection) {
-          if (ctx.onRequest) {
+          if (Object.hasOwnProperty.call(ctx, 'onRequest')) {
+            assert(typeof ctx.onRequest === 'function');
             ctx.request.body = ctx.request.body ? Buffer.concat([ctx.request.body, chunk]) : chunk;
           } else {
             ctx.request._write(chunk);
@@ -243,10 +244,10 @@ export default ({
             ctx.request._write();
           } else {
             if (onHttpRequestEnd) {
-              const isOnResponseUnbind = ctx.onRequest == null;
+              const isOnResponseUnbind = !Object.hasOwnProperty.call(ctx, 'onRequest');
               await onHttpRequestEnd(ctx);
               if (isOnResponseUnbind) {
-                assert(ctx.onRequest == null);
+                assert(!Object.hasOwnProperty.call(ctx, 'onRequest'));
               }
               assert(!controller.signal.aborted);
             }
