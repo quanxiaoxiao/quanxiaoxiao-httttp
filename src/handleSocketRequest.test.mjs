@@ -1472,3 +1472,97 @@ test('handleSocketRequest POST and GET', async () => {
   state.connector();
   server.close();
 });
+
+test('handleSocketRequest with forwardRequest', { only: true }, async () => {
+  const port1 = getPort();
+  const port2 = getPort();
+  const handleDataOnRemoteSocket = mock.fn(() => {});
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    ctx.requestForward = {
+      hostname: '127.0.0.1',
+      port: port2,
+    };
+  });
+  const onHttpRequestEnd = mock.fn((ctx) => {
+    assert(!ctx.requestForward.onBody.destroyed);
+  });
+  const onHttpResponseEnd = mock.fn((ctx) => {
+    assert.equal(ctx.response.body, null);
+    assert(ctx.requestForward.onBody instanceof PassThrough);
+    assert(ctx.requestForward.body instanceof PassThrough);
+    assert(ctx.requestForward.onBody.destroyed);
+    assert(ctx.requestForward.body.destroyed);
+  });
+
+  const onHttpError = mock.fn(() => {});
+  const server1 = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpRequestHeader,
+      onHttpRequestEnd,
+      onHttpResponseEnd,
+      onHttpError,
+    });
+  });
+  server1.listen(port1);
+
+  const server2 = net.createServer((socket) => {
+    socket.on('data', handleDataOnRemoteSocket);
+    setTimeout(() => {
+      socket.end(encodeHttp({
+        headers: {
+          Server: 'quan',
+        },
+        body: 'foo',
+      }));
+    }, 500);
+  });
+
+  server2.listen(port2);
+
+  await waitFor(100);
+
+  const onData = mock.fn((chunk) => {
+    assert.equal(
+      chunk.toString(),
+      'HTTP/1.1 200 OK\r\nserver: quan\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nfoo\r\n0\r\n\r\n',
+    );
+  });
+  const onClose = mock.fn(() => {});
+  const onError = mock.fn(() => {});
+
+  const state = {
+    connector: null,
+  };
+  state.connector = createConnector(
+    {
+      onData,
+      onClose,
+      onError,
+    },
+    () => connect(port1),
+  );
+
+  state.connector.write(Buffer.from('POST /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 6\r\n\r\naa'));
+
+  setTimeout(() => {
+    state.connector.write('bb');
+  }, 100);
+
+  setTimeout(() => {
+    state.connector.write('cc');
+  }, 150);
+
+  await waitFor(1500);
+  assert.equal(handleDataOnRemoteSocket.mock.calls.length, 3);
+  assert.equal(onClose.mock.calls.length, 0);
+  assert.equal(onError.mock.calls.length, 0);
+  assert.equal(onData.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 0);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 1);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+  state.connector();
+
+  server1.close();
+  server2.close();
+});

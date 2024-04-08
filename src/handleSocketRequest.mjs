@@ -181,32 +181,30 @@ export default ({
                 }
               },
               onEnd: () => {
-                if (!ctx.requestForward) {
-                  if (onHttpRequestEnd) {
-                    promisee(onHttpRequestEnd, ctx)
-                      .then(
-                        () => {
-                          assert(!Object.hasOwnProperty.call(ctx, 'onRequest'));
-                        },
-                      )
-                      .then(
-                        () => {
-                          if (!controller.signal.aborted) {
-                            doResponse(ctx);
-                          }
-                        },
-                        (error) => {
-                          if (!controller.signal.aborted) {
-                            ctx.error = error;
-                            doResponseError(ctx);
-                          } else {
-                            console.error(error);
-                          }
-                        },
-                      );
-                  } else {
-                    doResponse(ctx);
-                  }
+                if (onHttpRequestEnd) {
+                  promisee(onHttpRequestEnd, ctx)
+                    .then(
+                      () => {
+                        assert(!Object.hasOwnProperty.call(ctx, 'onRequest'));
+                      },
+                    )
+                    .then(
+                      () => {
+                        if (!controller.signal.aborted && !ctx.requestForward) {
+                          doResponse(ctx);
+                        }
+                      },
+                      (error) => {
+                        if (!controller.signal.aborted) {
+                          ctx.error = error;
+                          doResponseError(ctx);
+                        } else {
+                          console.error(error);
+                        }
+                      },
+                    );
+                } else if (!ctx.requestForward) {
+                  doResponse(ctx);
                 }
               },
             });
