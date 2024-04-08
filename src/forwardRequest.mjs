@@ -1,7 +1,9 @@
 import { Buffer } from 'node:buffer';
 import assert from 'node:assert';
+import process from 'node:process';
 import { PassThrough, Transform } from 'node:stream';
 import _ from 'lodash';
+import { wrapStreamRead } from '@quanxiaoxiao/node-utils';
 import { encodeHttp } from '@quanxiaoxiao/http-utils';
 import request from '@quanxiaoxiao/http-request';
 import getSocketConnection from './getSocketConnection.mjs';
@@ -72,6 +74,26 @@ export default async ({
         onChunkIncoming(ctx, chunk);
       }
     },
+    onEnd: async () => {
+      if (requestForwardOptions.onBody && state.transform) {
+        state.transform.unpipe(ctx.socket);
+        wrapStreamRead({
+          signal,
+          stream: state.transform,
+          onData: (chunk) => {
+            ctx.socket.write(chunk);
+          },
+          onEnd: () => {
+            ctx.socket.write(state.encode());
+          },
+        });
+        process.nextTick(() => {
+          if (state.transform.isPaused()) {
+            state.transform.resume();
+          }
+        });
+      }
+    },
   };
 
   assert(Array.isArray(requestForwardOptions.headers) || _.isPlainObject(requestForwardOptions.headers));
@@ -121,11 +143,8 @@ export default async ({
         requestForwardOptions.onBody
           .pipe(state.transform)
           .pipe(ctx.socket);
-      } else {
-        requestForwardOptions.onBody.destroy();
-        if (ctx.socket.writable) {
-          ctx.socket.write(encodeHttp(ctx.response));
-        }
+      } else if (ctx.socket.writable) {
+        ctx.socket.write(encodeHttp(ctx.response));
       }
     }
   };
@@ -153,29 +172,5 @@ export default async ({
 
   if (!requestForwardOptions.onBody) {
     ctx.response.body = responseItem.body;
-  } else if (!requestForwardOptions.onBody.destroyed) {
-    await Promise.all([
-      state.transform.writableNeedDrain ? new Promise((resolve) => {
-        state.transform.once('drain', () => {
-          setTimeout(() => {
-            resolve();
-          }, 5);
-        });
-      }) : Promise.resolve(),
-      ctx.socket.writableNeedDrain ? new Promise((resolve) => {
-        ctx.socket.once('drain', () => {
-          setTimeout(() => {
-            resolve();
-          }, 5);
-        });
-      }) : Promise.resolve(),
-    ]);
-    setTimeout(() => {
-      state.transform.unpipe(ctx.socket);
-      requestForwardOptions.onBody.destroy();
-      if (ctx.socket.writable) {
-        ctx.socket.write(state.encode());
-      }
-    });
   }
 };

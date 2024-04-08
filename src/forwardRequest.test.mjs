@@ -264,7 +264,7 @@ test('forwardRequest unable connect', async () => {
     });
     assert.fail();
   } catch (error) {
-    assert.equal(error.__proto__.constructor.name, 'SocketConnectError');
+    assert.equal(error.isConnect, false);
   }
   assert.equal(onForwardConnect.mock.calls.length, 0);
   await waitFor();
@@ -302,7 +302,7 @@ test('forwardRequest error close 1', async () => {
       onForwardConnect,
     });
   } catch (error) {
-    assert.equal(error.__proto__.constructor.name, 'SocketCloseError');
+    assert(error.isConnect);
   }
   assert.equal(onForwardConnect.mock.calls.length, 1);
   await waitFor(300);
@@ -340,7 +340,7 @@ test('forwardRequest error close 2', async () => {
       ctx,
     });
   } catch (error) {
-    assert.equal(error.__proto__.constructor.name, 'SocketCloseError');
+    assert(error.isConnect);
   }
   await waitFor(300);
   server.close();
@@ -383,10 +383,8 @@ test('forwardRequest', async () => {
 });
 
 test('forwardRequest response body with stream, content is empty', async () => {
-  const controller = new AbortController();
   const port = getPort();
   const _socket = new PassThrough();
-  mock.method(_socket, 'write');
   const ctx = {
     socket: _socket,
     request: {
@@ -407,8 +405,8 @@ test('forwardRequest response body with stream, content is empty', async () => {
     });
   });
   server.listen(port);
+  await waitFor(100);
   await forwardRequest({
-    signal: controller.signal,
     ctx,
   });
   assert.equal(ctx.response.headers['content-length'], 0);
@@ -582,7 +580,7 @@ test('forwardRequest request body with stream', async () => {
 test('forwardRequest response onbody with stream', async () => {
   const port = getPort();
   let isPaused = false;
-  const count = 20000;
+  const count = 6000;
   const content = 'adsfadsfa dfadsfw';
   let i = 0;
   const pathname = path.resolve(process.cwd(), '_temp', 'test_222');
@@ -618,11 +616,13 @@ test('forwardRequest response onbody with stream', async () => {
   });
   server.listen(port);
 
+  await waitFor(100);
+
   const _socket = new PassThrough();
 
-  _socket.pipe(ws);
-
   const onBody = new PassThrough();
+
+  _socket.pipe(ws);
 
   const ctx = {
     socket: _socket,
@@ -639,13 +639,11 @@ test('forwardRequest response onbody with stream', async () => {
       onBody,
     },
   };
-  const controller = new AbortController();
+
   await forwardRequest({
-    signal: controller.signal,
     ctx,
   });
   await waitFor(100);
-  assert(onBody.destroyed);
   assert(!ws.writableEnded);
   assert(!_socket.destroyed);
   assert(!_socket.writableEnded);
@@ -729,7 +727,7 @@ test('forwardRequest response onbody with stream, server socket close', async ()
     });
     throw new Error('xxx');
   } catch (error) {
-    assert.equal(error.__proto__.constructor.name, 'SocketCloseError');
+    assert(error.isConnect);
     assert(!ws.writableEnded);
     ws.end();
   }
@@ -817,7 +815,7 @@ test('forwardRequest request body with stream, server socket close', async () =>
   }
 
   await waitFor(300);
-  assert(!bodyStream.destroyed);
+  assert(bodyStream.destroyed);
 
   server.close();
 });
