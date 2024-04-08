@@ -1,4 +1,3 @@
-/* eslint no-proto: 0 */
 import { mock, test } from 'node:test';
 import { PassThrough } from 'node:stream';
 import process from 'node:process';
@@ -420,10 +419,6 @@ test('forwardRequest response body with stream, content is empty', async () => {
 test('forwardRequest response body with stream', async () => {
   const controller = new AbortController();
   const _socket = new PassThrough();
-  /*
-  const _write = _socket.write;
-  _socket.write = (chunk) => _write.call(_socket, chunk);
-  */
   mock.method(_socket, 'write');
   const port = getPort();
   const ctx = {
