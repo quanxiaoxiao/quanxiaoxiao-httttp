@@ -1,7 +1,6 @@
 import { Buffer } from 'node:buffer';
 import assert from 'node:assert';
-import process from 'node:process';
-import { PassThrough, Transform } from 'node:stream';
+import { PassThrough, Readable, Writable } from 'node:stream';
 import _ from 'lodash';
 import { wrapStreamRead } from '@quanxiaoxiao/node-utils';
 import { encodeHttp } from '@quanxiaoxiao/http-utils';
@@ -16,11 +15,6 @@ export default async ({
   onChunkIncoming,
 }) => {
   assert(_.isPlainObject(ctx.requestForward));
-  const state = {
-    encode: null,
-    transform: null,
-  };
-
   ctx.response = {
     bytesBody: 0,
     httpVersion: null,
@@ -74,33 +68,15 @@ export default async ({
         onChunkIncoming(ctx, chunk);
       }
     },
-    onEnd: async () => {
-      if (requestForwardOptions.onBody && state.transform) {
-        state.transform.unpipe(ctx.socket);
-        wrapStreamRead({
-          signal,
-          stream: state.transform,
-          onData: (chunk) => {
-            ctx.socket.write(chunk);
-          },
-          onEnd: () => {
-            ctx.socket.write(state.encode());
-          },
-        });
-        process.nextTick(() => {
-          if (state.transform.isPaused()) {
-            state.transform.resume();
-          }
-        });
-      }
-    },
   };
 
   assert(Array.isArray(requestForwardOptions.headers) || _.isPlainObject(requestForwardOptions.headers));
 
   if (Object.hasOwnProperty.call(ctx.requestForward, 'onBody')) {
     requestForwardOptions.onBody = ctx.requestForward.onBody;
-    if (requestForwardOptions.onBody && typeof requestForwardOptions.onBody.pipe === 'function') {
+    if (requestForwardOptions.onBody) {
+      assert(requestForwardOptions.onBody instanceof Readable);
+      assert(requestForwardOptions.onBody instanceof Writable);
       assert(requestForwardOptions.onBody.readable);
       assert(requestForwardOptions.onBody.writable);
     }
@@ -124,7 +100,7 @@ export default async ({
       assert(requestForwardOptions.onBody.writable);
       if (ctx.response.headers['content-length'] > 0
           || /^chunked$/i.test(ctx.response.headers['transfer-encoding'])) {
-        state.encode = encodeHttp({
+        const encodeHttpResponse = encodeHttp({
           ...ctx.response,
           body: new PassThrough(),
           onHeader: (chunk) => {
@@ -134,15 +110,20 @@ export default async ({
           },
         });
 
-        state.transform = new Transform({
-          transform(chunk, encoding, callback) {
-            callback(null, state.encode(chunk));
+        wrapStreamRead({
+          stream: requestForwardOptions.onBody,
+          signal,
+          onData: (chunk) => {
+            if (ctx.socket.writable) {
+              ctx.socket.write(encodeHttpResponse(chunk));
+            }
+          },
+          onEnd: () => {
+            if (ctx.socket.writable) {
+              ctx.socket.write(encodeHttpResponse());
+            }
           },
         });
-
-        requestForwardOptions.onBody
-          .pipe(state.transform)
-          .pipe(ctx.socket);
       } else if (ctx.socket.writable) {
         ctx.socket.write(encodeHttp(ctx.response));
       }
