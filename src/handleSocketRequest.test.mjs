@@ -1473,7 +1473,7 @@ test('handleSocketRequest POST and GET', async () => {
   server.close();
 });
 
-test('handleSocketRequest with forwardRequest', { only: true }, async () => {
+test('handleSocketRequest with forwardRequest', async () => {
   const port1 = getPort();
   const port2 = getPort();
   const handleDataOnRemoteSocket = mock.fn(() => {});
@@ -1561,6 +1561,96 @@ test('handleSocketRequest with forwardRequest', { only: true }, async () => {
   assert.equal(onHttpError.mock.calls.length, 0);
   assert.equal(onHttpRequestEnd.mock.calls.length, 1);
   assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+  state.connector();
+
+  server1.close();
+  server2.close();
+});
+
+test('handleSocketRequest with forwardRequest ctx.onResponse', async () => {
+  const port1 = getPort();
+  const port2 = getPort();
+  const handleDataOnRemoteSocket = mock.fn(() => {});
+  const onResponse = mock.fn(() => {});
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    ctx.onResponse = onResponse;
+    ctx.requestForward = {
+      hostname: '127.0.0.1',
+      port: port2,
+    };
+  });
+  const onHttpRequestEnd = mock.fn((ctx) => {
+    assert.equal(onResponse.mock.calls.length, 0);
+    assert(ctx.forwardRequest == null);
+  });
+  const onHttpResponseEnd = mock.fn((ctx) => {
+    assert.equal(onResponse.mock.calls.length, 1);
+    assert.equal(ctx.response.body.toString(), 'foo');
+  });
+
+  const onHttpError = mock.fn(() => {});
+  const server1 = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpRequestHeader,
+      onHttpRequestEnd,
+      onHttpResponseEnd,
+      onHttpError,
+    });
+  });
+  server1.listen(port1);
+
+  const server2 = net.createServer((socket) => {
+    socket.on('data', handleDataOnRemoteSocket);
+    setTimeout(() => {
+      socket.end(encodeHttp({
+        headers: {
+          Server: 'quan',
+        },
+        body: 'foo',
+      }));
+    }, 500);
+  });
+
+  server2.listen(port2);
+
+  await waitFor(100);
+
+  const onData = mock.fn(() => {});
+  const onClose = mock.fn(() => {});
+  const onError = mock.fn(() => {});
+
+  const state = {
+    connector: null,
+  };
+  state.connector = createConnector(
+    {
+      onData,
+      onClose,
+      onError,
+    },
+    () => connect(port1),
+  );
+
+  state.connector.write(Buffer.from('POST /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 6\r\n\r\naa'));
+
+  setTimeout(() => {
+    state.connector.write('bb');
+  }, 100);
+
+  setTimeout(() => {
+    state.connector.write('cc');
+  }, 150);
+
+  await waitFor(1500);
+  assert.equal(handleDataOnRemoteSocket.mock.calls.length, 3);
+  assert.equal(onClose.mock.calls.length, 0);
+  assert.equal(onError.mock.calls.length, 0);
+  assert.equal(onData.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 0);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 1);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+  assert.equal(onResponse.mock.calls.length, 1);
   state.connector();
 
   server1.close();
