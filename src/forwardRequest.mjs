@@ -104,24 +104,28 @@ export default async ({
           ...ctx.response,
           body: new PassThrough(),
           onHeader: (chunk) => {
-            if (ctx.socket.writable) {
-              ctx.socket.write(Buffer.concat([chunk, Buffer.from('\r\n')]));
-            }
+            ctx.socket.write(Buffer.concat([chunk, Buffer.from('\r\n')]));
           },
         });
+
+        const handleDrainOnSocket = () => {
+          if (requestForwardOptions.onBody.isPaused()) {
+            requestForwardOptions.onBody.resume();
+          }
+        };
+
+        ctx.socket.on('drain', handleDrainOnSocket);
 
         wrapStreamRead({
           stream: requestForwardOptions.onBody,
           signal,
-          onData: (chunk) => {
-            if (ctx.socket.writable) {
-              ctx.socket.write(encodeHttpResponse(chunk));
-            }
-          },
+          onData: (chunk) => ctx.socket.write(encodeHttpResponse(chunk)),
           onEnd: () => {
-            if (ctx.socket.writable) {
-              ctx.socket.write(encodeHttpResponse());
-            }
+            ctx.socket.off('drain', handleDrainOnSocket);
+            ctx.socket.write(encodeHttpResponse());
+          },
+          onError: () => {
+            ctx.socket.off('drain', handleDrainOnSocket);
           },
         });
       } else if (ctx.socket.writable) {
