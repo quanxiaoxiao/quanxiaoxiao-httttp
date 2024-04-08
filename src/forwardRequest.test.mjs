@@ -731,7 +731,7 @@ test('forwardRequest response onbody with stream, server socket close', async ()
   fs.unlinkSync(pathname);
 });
 
-test('forwardRequest request body with stream, server socket close', async () => {
+test('forwardRequest response body with stream, server socket close', async () => {
   const port = getPort();
   const server = net.createServer((socket) => {
     let i = 0;
@@ -811,6 +811,71 @@ test('forwardRequest request body with stream, server socket close', async () =>
 
   await waitFor(300);
   assert(bodyStream.destroyed);
+
+  server.close();
+});
+
+test('forwardRequest request body with stream', async () => {
+  const port = getPort();
+  const onBody = mock.fn(() => {});
+  const server = net.createServer((socket) => {
+    const decode = decodeHttpRequest({
+      onBody,
+      onEnd: () => {
+        socket.end(encodeHttp({
+          headers: {
+            name: 'quan',
+          },
+          body: 'ok',
+        }));
+      },
+    });
+    socket.on('data', (chunk) => {
+      decode(chunk);
+    });
+  });
+
+  server.listen(port);
+
+  await waitFor(100);
+  const _socket = new PassThrough();
+  const bodyStream = new PassThrough();
+  const ctx = {
+    socket: _socket,
+    request: {
+      method: 'POST',
+      path: '/aaa',
+      body: bodyStream,
+    },
+    requestForward: {
+      hostname: '127.0.0.1',
+      port,
+      protocol: 'http:',
+      body: bodyStream,
+    },
+  };
+
+  setTimeout(() => {
+    bodyStream.write('aaa');
+  }, 20);
+
+  setTimeout(() => {
+    bodyStream.write('bbb');
+  }, 50);
+
+  setTimeout(() => {
+    bodyStream.end();
+  }, 100);
+
+  await forwardRequest({
+    ctx,
+  });
+
+  assert.equal(ctx.response.body.toString(), 'ok');
+  assert.equal(ctx.response.statusCode, 200);
+  assert.equal(onBody.mock.calls.length, 2);
+  assert.equal(onBody.mock.calls[0].arguments[0].toString(), 'aaa');
+  assert.equal(onBody.mock.calls[1].arguments[0].toString(), 'bbb');
 
   server.close();
 });

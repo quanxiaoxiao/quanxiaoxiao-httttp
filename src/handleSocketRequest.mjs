@@ -90,8 +90,8 @@ export default ({
       ctx.requestForward.onBody = new PassThrough();
     }
     await forwardRequest({
-      signal: controller.signal,
       ctx,
+      signal: controller.signal,
       onForwardConnecting,
       onForwardConnect,
       onChunkIncoming,
