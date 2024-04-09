@@ -40,9 +40,26 @@ export default ({
   const controller = new AbortController();
 
   const state = {
+    timeCreate: Date.now(),
+    bytesIncoming: 0,
     ctx: null,
+    count: 0,
+    step: -1,
     execute: null,
     connector: null,
+  };
+
+  const doResponseEnd = () => {
+    const { ctx } = state;
+    state.step = -1;
+    state.ctx = null;
+    if (onHttpResponseEnd) {
+      try {
+        onHttpResponseEnd(ctx);
+      } catch (error) {
+        console.warn(error);
+      }
+    }
   };
 
   const doResponseError = (ctx) => {
@@ -74,10 +91,7 @@ export default ({
         }
         const response = generateResponse(ctx);
         state.connector.write(encodeHttp(response));
-        state.ctx = null;
-        if (onHttpResponseEnd) {
-          onHttpResponseEnd(ctx);
-        }
+        doResponseEnd();
       } catch (error) {
         if (!controller.signal.aborted && state.ctx) {
           ctx.error = error;
@@ -118,15 +132,7 @@ export default ({
       })
       .then(
         () => {
-          assert(!controller.signal.aborted);
-          state.ctx = null;
-        },
-      )
-      .then(
-        () => {
-          if (onHttpResponseEnd) {
-            onHttpResponseEnd(ctx);
-          }
+          doResponseEnd();
         },
         (error) => {
           if (!controller.signal.aborted) {
@@ -147,6 +153,7 @@ export default ({
   const bindExcute = (ctx) => {
     state.execute = decodeHttpRequest({
       onStartLine: async (ret) => {
+        state.step = 1;
         const [pathname, querystring = ''] = ret.path.split('?');
         ctx.request.httpVersion = ret.httpVersion;
         ctx.request.method = ret.method;
@@ -165,6 +172,7 @@ export default ({
         }
       },
       onHeader: async (ret) => {
+        state.step = 2;
         ctx.request.headersRaw = ret.headersRaw;
         ctx.request.headers = ret.headers;
         if (onHttpRequestHeader) {
@@ -253,6 +261,9 @@ export default ({
       },
       onBody: (chunk) => {
         assert(!controller.signal.aborted);
+        if (state.step === 2) {
+          state.step = 3;
+        }
         if (!ctx.request.connection) {
           if (Object.hasOwnProperty.call(ctx, 'onRequest')) {
             assert(typeof ctx.onRequest === 'function');
@@ -263,6 +274,7 @@ export default ({
         }
       },
       onEnd: async () => {
+        state.step = 4;
         if (!ctx.request.connection) {
           if (ctx.request._write) {
             ctx.request._write();
@@ -295,6 +307,8 @@ export default ({
   };
 
   const attachContext = () => {
+    state.step = 0;
+    state.count += 1;
     state.ctx = {
       socket,
       remoteAddress: clientAddress,
@@ -366,10 +380,12 @@ export default ({
     {
       onData: (chunk) => {
         assert(!controller.signal.aborted);
+        const size = chunk.length;
+        state.bytesIncoming += size;
         if (!state.ctx) {
           attachContext();
         }
-        if (!controller.signal.aborted && chunk.length > 0) {
+        if (!controller.signal.aborted && size > 0) {
           if (onChunkOutgoing) {
             onChunkOutgoing(state.ctx, chunk);
           }
