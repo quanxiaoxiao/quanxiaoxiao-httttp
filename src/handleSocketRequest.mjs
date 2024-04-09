@@ -182,13 +182,15 @@ export default ({
           await onHttpRequestHeader(ctx);
           assert(!controller.signal.aborted);
         }
-        if (ctx.request.headers.upgrade
-          && /^websocket$/i.test(ctx.request.headers.upgrade)) {
+        if (ctx.request.headers.upgrade) {
+          if (!/^websocket$/i.test(ctx.request.headers.upgrade)) {
+            throw createError(510);
+          }
           if (ctx.request.method !== 'GET') {
             throw createError(400);
           }
           if (!ctx.requestForward) {
-            throw createError(503);
+            throw createError(510);
           }
           ctx.request.connection = true;
           if (onHttpRequestConnection) {

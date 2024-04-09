@@ -55,6 +55,9 @@ export default async ({
 
   if (onForwardConnecting) {
     await onForwardConnecting(ctx);
+    if (signal) {
+      assert(!signal.aborted);
+    }
   }
 
   const requestForwardOptions = {
