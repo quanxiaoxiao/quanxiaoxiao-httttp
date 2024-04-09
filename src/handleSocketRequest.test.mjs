@@ -13,6 +13,7 @@ import {
   decodeHttpRequest,
   decodeHttpResponse,
 } from '@quanxiaoxiao/http-utils';
+import { HttpParserError } from '@quanxiaoxiao/http-request';
 import { createConnector } from '@quanxiaoxiao/socket';
 import handleSocketRequest from './handleSocketRequest.mjs';
 
@@ -1893,4 +1894,79 @@ test('handleSocketRequest forwardRequest response body with stream', async () =>
     () => connect(port1),
   );
   state.connector.write('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n');
+});
+
+test('handleSocketRequest with forwardRequest, remote server response invalid', { only: true }, async () => {
+  const port1 = getPort();
+  const port2 = getPort();
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    ctx.requestForward = {
+      hostname: '127.0.0.1',
+      port: port2,
+    };
+  });
+  const onHttpResponseEnd = mock.fn(() => {
+  });
+
+  const onHttpError = mock.fn((ctx) => {
+    assert(ctx.error instanceof HttpParserError);
+  });
+  const server1 = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpRequestHeader,
+      onHttpResponseEnd,
+      onHttpError,
+    });
+  });
+  server1.listen(port1);
+
+  const server2 = net.createServer((socket) => {
+    socket.on('data', () => {});
+    setTimeout(() => {
+      socket.end(encodeHttp({
+        method: 'POST',
+        path: '/xxxx',
+        headers: {
+          name: 'quan',
+        },
+        body: 'foo',
+      }));
+    }, 500);
+  });
+
+  server2.listen(port2);
+
+  await waitFor(100);
+
+  const onData = mock.fn((chunk) => {
+    assert(/^HTTP\/1\.1 502/.test(chunk.toString()));
+  });
+  const onClose = mock.fn(() => {});
+  const onError = mock.fn(() => {});
+
+  const state = {
+    connector: null,
+  };
+  state.connector = createConnector(
+    {
+      onData,
+      onClose,
+      onError,
+    },
+    () => connect(port1),
+  );
+
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
+
+  await waitFor(1500);
+  assert.equal(onClose.mock.calls.length, 1);
+  assert.equal(onError.mock.calls.length, 0);
+  assert.equal(onData.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 1);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 0);
+  state.connector();
+
+  server1.close();
+  server2.close();
 });

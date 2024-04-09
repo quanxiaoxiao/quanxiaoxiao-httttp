@@ -13,7 +13,7 @@ export default (ctx) => {
     body: null,
   };
   if (ctx.response.statusCode == null) {
-    const errorName = ctx.error.__proto__.constructor.name;
+    const errorName = ctx.error.constructor.name;
     if (errorName === 'SocketConnectError') {
       ctx.response.statusCode = 502;
     } else if (errorName === 'SocketConnectTimeoutError') {

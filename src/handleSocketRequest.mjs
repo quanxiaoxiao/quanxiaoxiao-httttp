@@ -5,6 +5,11 @@ import { PassThrough } from 'node:stream';
 import createError from 'http-errors';
 import { createConnector } from '@quanxiaoxiao/socket';
 import { decodeHttpRequest, encodeHttp } from '@quanxiaoxiao/http-utils';
+import {
+  HttpParserError,
+  NetConnectTimeoutError,
+  SocketCloseError,
+} from '@quanxiaoxiao/http-request';
 import { wrapStreamWrite } from '@quanxiaoxiao/node-utils';
 import forwardRequest from './forwardRequest.mjs';
 import forwardWebsocket from './forwardWebsocket.mjs';
@@ -217,6 +222,13 @@ export default ({
                 (error) => {
                   if (!controller.signal.aborted) {
                     ctx.error = error;
+                    if (error instanceof HttpParserError) {
+                      ctx.error.statusCode = 502;
+                    } else if (error instanceof NetConnectTimeoutError) {
+                      ctx.error.statusCode = 504;
+                    } else if (error instanceof SocketCloseError) {
+                      ctx.error.statusCode = 502;
+                    }
                     doResponseError(ctx);
                   }
                 },
