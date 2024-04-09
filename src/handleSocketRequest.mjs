@@ -51,7 +51,7 @@ export default ({
       if (onHttpError) {
         onHttpError(ctx);
       } else {
-        console.error(ctx.error);
+        console.warn(ctx.error);
       }
       try {
         state.connector.end(encodeHttp(ctx.response));
@@ -83,7 +83,7 @@ export default ({
           ctx.error = error;
           doResponseError(ctx);
         } else {
-          console.error(error);
+          console.warn(error);
         }
       }
     }
@@ -94,23 +94,54 @@ export default ({
     if (!ctx.onResponse) {
       ctx.requestForward.onBody = new PassThrough();
     }
-    await forwardRequest({
+    forwardRequest({
       ctx,
       signal: controller.signal,
       onForwardConnecting,
       onForwardConnect,
       onChunkIncoming,
-    });
-    assert(!controller.signal.aborted);
-    if (ctx.onResponse) {
-      await ctx.onResponse(ctx);
-      assert(!controller.signal.aborted);
-      state.connector.write(encodeHttp(generateResponse(ctx)));
-    }
-    state.ctx = null;
-    if (onHttpResponseEnd) {
-      onHttpResponseEnd(ctx);
-    }
+    })
+      .then(
+        () => {
+          assert(!controller.signal.aborted);
+        },
+      )
+      .then(() => {
+        if (ctx.onResponse) {
+          return promisee(ctx.onResponse, ctx)
+            .then(() => {
+              assert(!controller.signal.aborted);
+              state.connector.write(encodeHttp(generateResponse(ctx)));
+            });
+        }
+        return Promise.resolve(ctx);
+      })
+      .then(
+        () => {
+          assert(!controller.signal.aborted);
+          state.ctx = null;
+        },
+      )
+      .then(
+        () => {
+          if (onHttpResponseEnd) {
+            onHttpResponseEnd(ctx);
+          }
+        },
+        (error) => {
+          if (!controller.signal.aborted) {
+            ctx.error = error;
+            if (error instanceof HttpParserError) {
+              ctx.error.statusCode = 502;
+            } else if (error instanceof NetConnectTimeoutError) {
+              ctx.error.statusCode = 504;
+            } else if (error instanceof SocketCloseError) {
+              ctx.error.statusCode = 502;
+            }
+            doResponseError(ctx);
+          }
+        },
+      );
   };
 
   const bindExcute = (ctx) => {
@@ -204,7 +235,7 @@ export default ({
                           ctx.error = error;
                           doResponseError(ctx);
                         } else {
-                          console.error(error);
+                          console.warn(error);
                         }
                       },
                     );
@@ -216,23 +247,7 @@ export default ({
           }
 
           if (ctx.requestForward) {
-            doForward(ctx)
-              .then(
-                () => {},
-                (error) => {
-                  if (!controller.signal.aborted) {
-                    ctx.error = error;
-                    if (error instanceof HttpParserError) {
-                      ctx.error.statusCode = 502;
-                    } else if (error instanceof NetConnectTimeoutError) {
-                      ctx.error.statusCode = 504;
-                    } else if (error instanceof SocketCloseError) {
-                      ctx.error.statusCode = 502;
-                    }
-                    doResponseError(ctx);
-                  }
-                },
-              );
+            doForward(ctx);
           }
         }
       },
@@ -266,7 +281,7 @@ export default ({
               if (ctx.response) {
                 doResponse(ctx);
               } else if (ctx.requestForward) {
-                await doForward(ctx);
+                doForward(ctx);
               } else {
                 throw createError(503);
               }
@@ -333,9 +348,12 @@ export default ({
           if (!controller.signal.aborted) {
             if (state.ctx) {
               state.ctx.error = error;
+              if (error instanceof HttpParserError) {
+                error.statusCode = 400;
+              }
               doResponseError(state.ctx);
             } else {
-              console.error(error);
+              console.warn(error);
               state.connector();
               controller.abort();
             }
@@ -363,7 +381,7 @@ export default ({
         controller.abort();
       },
       onError: (error) => {
-        console.error(error);
+        console.warn(error);
         if (!controller.signal.aborted) {
           controller.abort();
         }

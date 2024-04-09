@@ -13,16 +13,6 @@ export default (ctx) => {
     body: null,
   };
   if (ctx.response.statusCode == null) {
-    const errorName = ctx.error.constructor.name;
-    if (errorName === 'SocketConnectError') {
-      ctx.response.statusCode = 502;
-    } else if (errorName === 'SocketConnectTimeoutError') {
-      ctx.response.statusCode = 504;
-    } else if (errorName === 'UrlParseError') {
-      ctx.response.statusCode = 502;
-    }
-  }
-  if (ctx.response.statusCode == null) {
     if (ctx.requestForward) {
       ctx.response.statusCode = 502;
     } else {
