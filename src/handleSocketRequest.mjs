@@ -203,7 +203,7 @@ export default ({
               onHttpError,
             });
           }
-        } else if (!ctx.onRequest) {
+        } else if (!Object.hasOwnProperty.call(ctx, 'onRequest')) {
           if (ctx.request.headers['content-length'] > 0
               || /^chunked$/i.test(ctx.request.headers['transfer-encoding'])) {
             if (!ctx.request.body) {
@@ -257,6 +257,8 @@ export default ({
           if (ctx.requestForward) {
             doForward(ctx);
           }
+        } else {
+          assert(typeof ctx.onRequest === 'function');
         }
       },
       onBody: (chunk) => {
@@ -265,8 +267,7 @@ export default ({
           state.step = 3;
         }
         if (!ctx.request.connection) {
-          if (Object.hasOwnProperty.call(ctx, 'onRequest')) {
-            assert(typeof ctx.onRequest === 'function');
+          if (ctx.onRequest) {
             ctx.request.body = ctx.request.body ? Buffer.concat([ctx.request.body, chunk]) : chunk;
           } else {
             ctx.request._write(chunk);
