@@ -8,7 +8,11 @@ import net from 'node:net';
 import assert from 'node:assert';
 import createError from 'http-errors';
 import _ from 'lodash';
-import { encodeHttp, decodeHttpRequest } from '@quanxiaoxiao/http-utils';
+import {
+  encodeHttp,
+  decodeHttpRequest,
+  decodeHttpResponse,
+} from '@quanxiaoxiao/http-utils';
 import { createConnector } from '@quanxiaoxiao/socket';
 import handleSocketRequest from './handleSocketRequest.mjs';
 
@@ -1777,4 +1781,116 @@ test('handleSocketRequest forwardRequest request body with stream', async () => 
   setTimeout(() => {
     walk();
   }, 100);
+});
+
+test('handleSocketRequest forwardRequest response body with stream', async () => {
+  const count = 6000;
+  let i = 0;
+  let isPaused = false;
+  const content = 'asdfasdf asdfw';
+  const port1 = getPort();
+  const port2 = getPort();
+  const pathname = path.resolve(process.cwd(), `test_${Date.now()}_aaa_bbb_sa888`);
+  const ws = fs.createWriteStream(pathname);
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    ctx.requestForward = {
+      hostname: '127.0.0.1',
+      port: port2,
+    };
+  });
+  const onHttpRequestEnd = mock.fn(() => {});
+  const onHttpResponseEnd = mock.fn(() => {});
+  const onHttpError = mock.fn(() => {});
+  const server1 = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpRequestHeader,
+      onHttpRequestEnd,
+      onHttpResponseEnd,
+      onHttpError,
+    });
+  });
+  server1.listen(port1);
+
+  const server2 = net.createServer((socket) => {
+    const encode = encodeHttp({
+      headers: {
+        server: 'quan',
+      },
+    });
+    const walk = () => {
+      while (!isPaused && i < count) {
+        const s = `${_.times(500).map(() => content).join('')}:${i}`;
+        const ret = socket.write(encode(s));
+        if (ret === false) {
+          isPaused = true;
+        }
+        i++;
+      }
+      if (i >= count && !socket.writableEnded) {
+        socket.end(encode());
+      }
+    };
+    setTimeout(() => {
+      socket.on('drain', () => {
+        isPaused = false;
+        walk();
+      });
+      walk();
+    }, 200);
+  });
+
+  server2.listen(port2);
+
+  await waitFor(100);
+
+  const state = {
+    connector: null,
+  };
+
+  const onError = mock.fn(() => {});
+  const onClose = mock.fn(() => {});
+
+  ws.on('drain', () => {
+    state.connector.resume();
+  });
+
+  const decode = decodeHttpResponse({
+    onHeader: () => {},
+    onBody: (chunk) => {
+      const ret = ws.write(chunk);
+      if (ret === false) {
+        state.connector.pause();
+      }
+    },
+    onEnd: () => {
+      ws.end();
+      setTimeout(() => {
+        assert.equal(onClose.mock.calls.length, 0);
+        assert.equal(onError.mock.calls.length, 0);
+        assert.equal(onHttpRequestEnd.mock.calls.length, 1);
+        assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+        state.connector();
+        server1.close();
+        server2.close();
+        const buf = fs.readFileSync(pathname);
+        assert(new RegExp(`:${count - 1}$`).test(buf.toString()));
+        fs.unlinkSync(pathname);
+      }, 1000);
+    },
+  });
+
+  const onData = mock.fn((chunk) => {
+    decode(chunk);
+  });
+
+  state.connector = createConnector(
+    {
+      onData,
+      onError,
+      onClose,
+    },
+    () => connect(port1),
+  );
+  state.connector.write('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n');
 });
