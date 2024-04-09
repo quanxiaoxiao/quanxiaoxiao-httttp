@@ -41,6 +41,9 @@ export default ({
 
   const state = {
     timeCreate: Date.now(),
+    timeOnStart: performance.now(),
+    timeOnLastActive: null,
+    timeOnActive: null,
     bytesIncoming: 0,
     ctx: null,
     count: 0,
@@ -383,6 +386,12 @@ export default ({
         assert(!controller.signal.aborted);
         const size = chunk.length;
         state.bytesIncoming += size;
+        if (state.timeOnActive == null) {
+          state.timeOnLastActive = performance.now();
+        } else {
+          state.timeOnLastActive = state.timeOnActive;
+        }
+        state.timeOnActive = performance.now();
         if (!state.ctx) {
           attachContext();
         }
