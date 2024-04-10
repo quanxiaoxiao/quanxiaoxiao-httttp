@@ -31,6 +31,7 @@ export default async ({
     statusText: null,
     headers: {},
     headersRaw: [],
+    body: null,
   };
 
   ctx.requestForward = {
@@ -162,8 +163,10 @@ export default async ({
       },
       onError: (error) => {
         ctx.error = error;
-        if (onHttpResponseEnd) {
-          onHttpResponseEnd(ctx);
+        if (onHttpError) {
+          onHttpError(ctx);
+        } else {
+          console.warn(error);
         }
       },
     },

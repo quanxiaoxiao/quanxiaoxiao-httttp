@@ -25,6 +25,7 @@ export default (ctx) => {
   ) {
     ctx.response.body = ctx.error.message;
   }
+  assert(ctx.response.statusCode >= 0 && ctx.response.statusCode <= 999);
   if (STATUS_CODES[ctx.response.statusCode]) {
     ctx.response.statusText = STATUS_CODES[ctx.response.statusCode];
     if (!ctx.response.body) {

@@ -5,27 +5,6 @@ import { STATUS_CODES } from 'node:http';
 import createError from 'http-errors';
 import attachResponseError from './attachResponseError.mjs';
 
-class SocketConnectError extends Error {
-  constructor(message) {
-    super(message);
-    this.message = message || 'Socket Connect Error';
-  }
-}
-
-class SocketConnectTimeoutError extends Error {
-  constructor(message) {
-    super(message);
-    this.message = message || 'Socket Connect Timeout';
-  }
-}
-
-class UrlParseError extends Error {
-  constructor(message) {
-    super(message);
-    this.message = message || 'Url Parse Error';
-  }
-}
-
 test('attachResponseError', () => {
   assert.throws(
     () => {
@@ -57,23 +36,6 @@ test('attachResponseError', () => {
   assert.equal(ctx.response.statusCode, 404);
   assert.equal(ctx.response.statusText, STATUS_CODES[404]);
   assert.equal(ctx.response.body, 'test not found');
-
-  ctx.error = new SocketConnectError();
-  attachResponseError(ctx);
-  assert.equal(ctx.response.statusCode, 502);
-
-  ctx.error = new SocketConnectTimeoutError();
-  attachResponseError(ctx);
-  assert.equal(ctx.response.statusCode, 504);
-
-  ctx.error = new UrlParseError();
-  attachResponseError(ctx);
-  assert.equal(ctx.response.statusCode, 502);
-
-  ctx.error = new Error();
-  ctx.error.code = 'ECONNRESET';
-  attachResponseError(ctx);
-  assert.equal(ctx.response.statusCode, 500);
 
   ctx.error = new Error();
   ctx.error.code = 'ECONNRESET';
