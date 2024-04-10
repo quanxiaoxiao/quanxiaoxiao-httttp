@@ -1,4 +1,5 @@
 import { STATUS_CODES } from 'node:http';
+import assert from 'node:assert';
 import createError from 'http-errors';
 import {
   getCurrentDateName,
@@ -44,5 +45,6 @@ export default (ctx) => {
   response.headers = setHeaders(response.headers, {
     Date: getCurrentDateName(),
   });
+  assert(response.statusCode >= 0 && response.statusCode <= 999);
   return response;
 };
