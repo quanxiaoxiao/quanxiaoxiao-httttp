@@ -1,7 +1,9 @@
-import handleSocketHttp from './handleSocketHttp.mjs';
 import forwardRequest from './forwardRequest.mjs';
+import handleSocketRequest from './handleSocketRequest.mjs';
+
+export default handleSocketRequest;
 
 export {
-  handleSocketHttp,
+  handleSocketRequest,
   forwardRequest,
 };
