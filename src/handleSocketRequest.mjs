@@ -23,6 +23,7 @@ const promisee = async (fn, ...args) => {
 
 export default ({
   socket,
+  onClose,
   onHttpRequest,
   onHttpRequestStartLine,
   onHttpRequestHeader,
@@ -407,11 +408,17 @@ export default ({
       onClose: () => {
         assert(!controller.signal.aborted);
         controller.abort();
+        if (state.ctx && onClose) {
+          onClose(state.ctx);
+        }
       },
       onError: (error) => {
         console.warn(error);
         if (!controller.signal.aborted) {
           controller.abort();
+          if (state.ctx && onClose) {
+            onClose(state.ctx);
+          }
         }
       },
     },
