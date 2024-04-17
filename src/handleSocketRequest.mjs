@@ -36,8 +36,6 @@ export default ({
   onChunkIncoming,
   onChunkOutgoing,
 }) => {
-  const clientAddress = socket.remoteAddress;
-
   const controller = new AbortController();
 
   const state = {
@@ -318,8 +316,8 @@ export default ({
     state.count += 1;
     state.ctx = {
       socket,
-      remoteAddress: clientAddress,
       request: {
+        timeCreate: Date.now(),
         connection: false,
         method: null,
         path: null,
