@@ -85,6 +85,7 @@ export default ({
   };
 
   const doResponse = async (ctx) => {
+    assert(!ctx.error);
     if (!controller.signal.aborted) {
       try {
         if (ctx.onResponse) {
