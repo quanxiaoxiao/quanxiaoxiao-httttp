@@ -107,7 +107,7 @@ export default ({
           headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
           body: new PassThrough(),
           onHeader: (chunk) => {
-            state.connector.write(chunk);
+            state.connector.write(Buffer.concat([chunk, Buffer.from('\r\n')]));
           },
         });
         process.nextTick(() => {
