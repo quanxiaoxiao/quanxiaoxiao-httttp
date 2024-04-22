@@ -1,16 +1,22 @@
 import { Buffer } from 'node:buffer';
 import qs from 'node:querystring';
 import assert from 'node:assert';
-import { PassThrough } from 'node:stream';
+import { PassThrough, Readable } from 'node:stream';
 import createError from 'http-errors';
 import { createConnector } from '@quanxiaoxiao/socket';
-import { decodeHttpRequest, encodeHttp } from '@quanxiaoxiao/http-utils';
+import {
+  decodeHttpRequest,
+  encodeHttp,
+} from '@quanxiaoxiao/http-utils';
 import {
   HttpParserError,
   NetConnectTimeoutError,
   SocketCloseError,
 } from '@quanxiaoxiao/http-request';
-import { wrapStreamWrite } from '@quanxiaoxiao/node-utils';
+import {
+  wrapStreamWrite,
+  wrapStreamRead,
+} from '@quanxiaoxiao/node-utils';
 import forwardRequest from './forwardRequest.mjs';
 import forwardWebsocket from './forwardWebsocket.mjs';
 import attachResponseError from './attachResponseError.mjs';
@@ -84,23 +90,52 @@ export default ({
     }
   };
 
+  const handleError = (error, ctx) => {
+    if (!controller.signal.aborted) {
+      ctx.error = error;
+      doResponseError(ctx);
+    } else {
+      console.warn(error);
+    }
+  };
+
   const doResponse = async (ctx) => {
     assert(!ctx.error);
     if (!controller.signal.aborted) {
-      try {
-        if (ctx.onResponse) {
-          await ctx.onResponse(ctx);
-          assert(!controller.signal.aborted);
-        }
-        const response = generateResponse(ctx);
-        state.connector.write(encodeHttp(response));
-        doResponseEnd();
-      } catch (error) {
-        if (!controller.signal.aborted && state.ctx) {
-          ctx.error = error;
-          doResponseError(ctx);
-        } else {
-          console.warn(error);
+      if (ctx.response && ctx.response.body instanceof Readable) {
+        const encodeHttpResponse = encodeHttp({
+          headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
+          body: new PassThrough(),
+          onHeader: (chunk) => {
+            state.connector.write(chunk);
+          },
+        });
+        process.nextTick(() => {
+          try {
+            wrapStreamRead({
+              signal: controller.signal,
+              stream: ctx.response.body,
+              onData: (chunk) => state.connector.write(encodeHttpResponse(chunk)),
+              onEnd: () => {
+                state.connector.write(encodeHttpResponse());
+              },
+              onError: (error) => handleError(error, ctx),
+            });
+          } catch (error) {
+            handleError(error, ctx);
+          }
+        });
+      } else {
+        try {
+          if (ctx.onResponse) {
+            await ctx.onResponse(ctx);
+            assert(!controller.signal.aborted);
+          }
+          const response = generateResponse(ctx);
+          state.connector.write(encodeHttp(response));
+          doResponseEnd();
+        } catch (error) {
+          handleError(error, ctx);
         }
       }
     }
@@ -243,14 +278,7 @@ export default ({
                           doResponse(ctx);
                         }
                       },
-                      (error) => {
-                        if (!controller.signal.aborted) {
-                          ctx.error = error;
-                          doResponseError(ctx);
-                        } else {
-                          console.warn(error);
-                        }
-                      },
+                      (error) => handleError(error, ctx),
                     );
                 } else if (!ctx.requestForward) {
                   doResponse(ctx);
@@ -402,6 +430,15 @@ export default ({
             onChunkOutgoing(state.ctx, chunk);
           }
           execute(chunk);
+        }
+      },
+      onDrain: () => {
+        if (state.ctx
+          && state.ctx.response
+          && state.ctx.response.body instanceof Readable
+          && state.ctx.response.body.isPaused()
+        ) {
+          state.ctx.response.body.resume();
         }
       },
       onClose: () => {
