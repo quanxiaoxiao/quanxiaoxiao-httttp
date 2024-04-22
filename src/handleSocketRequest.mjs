@@ -118,6 +118,7 @@ export default ({
               onData: (chunk) => state.connector.write(encodeHttpResponse(chunk)),
               onEnd: () => {
                 state.connector.write(encodeHttpResponse());
+                doResponseEnd();
               },
               onError: (error) => handleError(error, ctx),
             });
