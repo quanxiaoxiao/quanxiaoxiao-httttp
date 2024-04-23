@@ -1,9 +1,9 @@
 /* eslint no-use-before-define: 0 */
 import { PassThrough } from 'node:stream';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test, mock } from 'node:test';
 import process from 'node:process';
-import path from 'node:path';
-import fs from 'node:fs';
 import net from 'node:net';
 import assert from 'node:assert';
 import createError from 'http-errors';
@@ -13,7 +13,11 @@ import {
   decodeHttpRequest,
   decodeHttpResponse,
 } from '@quanxiaoxiao/http-utils';
-import { HttpParserError, SocketCloseError } from '@quanxiaoxiao/http-request';
+import {
+  httpRequest,
+  HttpParserError,
+  SocketCloseError,
+} from '@quanxiaoxiao/http-request';
 import { createConnector } from '@quanxiaoxiao/socket';
 import handleSocketRequest from './handleSocketRequest.mjs';
 
@@ -2114,4 +2118,68 @@ test('handleSocketRequest onClose', async () => {
   assert.equal(onHttpRequestEnd.mock.calls.length, 0);
   assert.equal(onHttpResponseEnd.mock.calls.length, 0);
   server.close();
+});
+
+test('handleSocketRequest forwardRequest stream', async () => {
+  const port1 = getPort();
+  const port2 = getPort();
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    ctx.requestForward = {
+      hostname: '127.0.0.1',
+      port: port2,
+    };
+  });
+  const onHttpResponseEnd = mock.fn(() => {});
+  const onHttpError = mock.fn(() => {});
+  const server1 = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpRequestHeader,
+      onHttpResponseEnd,
+      onHttpError,
+    });
+  });
+  server1.listen(port1);
+
+  const packageBuf = fs.readFileSync(path.resolve(process.cwd(), 'package-lock.json'));
+
+  const server2 = net.createServer((socket) => {
+    const bodyBufList = [];
+    const decode = decodeHttpRequest({
+      onBody: (chunk) => {
+        bodyBufList.push(chunk);
+      },
+      onEnd: () => {
+        assert.equal(
+          Buffer.concat(bodyBufList).toString(),
+          packageBuf.toString(),
+        );
+        setTimeout(() => {
+          socket.end('HTTP/1.1 200 OK\r\nServer: quan\r\nContent-Length: 2\r\n\r\nOK');
+        }, 100);
+      },
+    });
+    socket.on('data', (chunk) => {
+      decode(chunk);
+    });
+  });
+
+  server2.listen(port2);
+
+  await waitFor(100);
+
+  const ret = await httpRequest({
+    hostname: '127.0.0.1',
+    port: port1,
+    method: 'POST',
+    path: '/upload?name=package-lock.json',
+    body: packageBuf,
+  });
+
+  assert.equal(ret.statusCode, 200);
+  assert.equal(onHttpError.mock.calls.length, 0);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+
+  server1.close();
+  server2.close();
 });
