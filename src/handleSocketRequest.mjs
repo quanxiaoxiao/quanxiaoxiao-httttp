@@ -457,16 +457,21 @@ export default ({
       onClose: () => {
         assert(!controller.signal.aborted);
         controller.abort();
-        if (state.ctx && onClose) {
-          onClose(state.ctx);
+        if (state.ctx) {
+          state.ctx.error = new Error('Socket Close Error');
+          if (onClose) {
+            onClose(state.ctx);
+          }
         }
       },
       onError: (error) => {
-        console.warn(error);
         if (!controller.signal.aborted) {
           controller.abort();
-          if (state.ctx && onClose) {
-            onClose(state.ctx);
+          if (state.ctx) {
+            state.ctx.error = error;
+            if (onClose) {
+              onClose(state.ctx);
+            }
           }
         }
       },
