@@ -101,7 +101,7 @@ export default ({
 
   const doResponse = async (ctx) => {
     assert(!ctx.error);
-    if (!controller.signal.aborted) {
+    if (!controller.signal.aborted && ctx.socket.writable) {
       if (ctx.response && ctx.response.body instanceof Readable) {
         const encodeHttpResponse = encodeHttp({
           headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
