@@ -117,8 +117,20 @@ export default ({
               stream: ctx.response.body,
               onData: (chunk) => state.connector.write(encodeHttpResponse(chunk)),
               onEnd: () => {
-                state.connector.write(encodeHttpResponse());
-                doResponseEnd();
+                try {
+                  state.connector.write(encodeHttpResponse());
+                } catch (error) {
+                  if (!controller.signal.aborted) {
+                    controller.abort();
+                    ctx.error = error;
+                    if (onClose) {
+                      onClose(ctx);
+                    }
+                  }
+                }
+                if (!controller.signal.aborted) {
+                  doResponseEnd();
+                }
               },
               onError: (error) => handleError(error, ctx),
             });
