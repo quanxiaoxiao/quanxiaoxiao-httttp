@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import zlib from 'node:zlib';
 import { STATUS_CODES } from 'node:http';
 import generateResponse from './generateResponse.mjs';
 
@@ -9,6 +10,9 @@ test('generateResponse', () => {
     generateResponse(ctx);
   });
   const ctx = {
+    request: {
+      headers: {},
+    },
     response: {
       statusCode: 204,
       statusText: 'aaa',
@@ -59,4 +63,27 @@ test('generateResponse', () => {
   assert(Array.isArray(response.headers));
   assert(!response.headers.includes('text/plain'));
   assert(response.headers.includes('text/html'));
+});
+
+test('generateResponse gzip', () => {
+  const ctx = {
+    request: {
+      headers: {
+        'accept-encoding': 'gzip',
+      },
+    },
+    response: {
+      data: {
+        name: 'quan',
+      },
+    },
+  };
+  const response = generateResponse(ctx);
+  assert.equal(response.statusCode, 200);
+  assert(response.headers.includes('gzip'));
+  assert(response.headers.includes('application/json'));
+  assert.deepEqual(
+    ctx.response.data,
+    JSON.parse(zlib.unzipSync(response.body).toString()),
+  );
 });

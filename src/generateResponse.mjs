@@ -1,5 +1,6 @@
 import { STATUS_CODES } from 'node:http';
 import assert from 'node:assert';
+import zlib from 'node:zlib';
 import createError from 'http-errors';
 import {
   convertObjectToArray,
@@ -33,13 +34,24 @@ export default (ctx) => {
       response.headers,
       ['content-encoding'],
     );
-    response.headers = setHeaders(
-      response.headers,
-      {
-        'Content-Type': 'application/json',
-      },
-    );
-    response.body = JSON.stringify(ctx.response.data);
+    if (ctx.request && ctx.request.headers && /\bgzip\b/i.test(ctx.request.headers['accept-encoding'])) {
+      response.headers = setHeaders(
+        response.headers,
+        {
+          'Content-Type': 'application/json',
+          'Content-Encoding': 'gzip',
+        },
+      );
+      response.body = zlib.gzipSync(JSON.stringify(ctx.response.data));
+    } else {
+      response.headers = setHeaders(
+        response.headers,
+        {
+          'Content-Type': 'application/json',
+        },
+      );
+      response.body = JSON.stringify(ctx.response.data);
+    }
   }
   assert(response.statusCode >= 0 && response.statusCode <= 999);
   return response;
