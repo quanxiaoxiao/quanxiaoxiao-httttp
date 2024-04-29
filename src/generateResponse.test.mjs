@@ -17,7 +17,6 @@ test('generateResponse', () => {
   };
   let response = generateResponse(ctx);
   assert(Array.isArray(response.headers));
-  assert(response.headers.includes('Date'));
   assert.equal(response.statusCode, 204);
   assert.equal(response.statusText, STATUS_CODES[204]);
   assert.equal(response.body, null);

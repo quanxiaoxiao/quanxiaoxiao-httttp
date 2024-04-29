@@ -2,7 +2,6 @@ import { STATUS_CODES } from 'node:http';
 import assert from 'node:assert';
 import createError from 'http-errors';
 import {
-  getCurrentDateName,
   convertObjectToArray,
   filterHeaders,
   setHeaders,
@@ -10,7 +9,7 @@ import {
 
 export default (ctx) => {
   if (!ctx.response) {
-    throw createError(503);
+    throw createError(503, '`ctx.response` is unset');
   }
   const response = {
     statusCode: ctx.response.statusCode || 200,
@@ -42,9 +41,6 @@ export default (ctx) => {
     );
     response.body = JSON.stringify(ctx.response.data);
   }
-  response.headers = setHeaders(response.headers, {
-    Date: getCurrentDateName(),
-  });
   assert(response.statusCode >= 0 && response.statusCode <= 999);
   return response;
 };
