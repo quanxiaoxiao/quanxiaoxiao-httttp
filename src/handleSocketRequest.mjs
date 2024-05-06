@@ -47,8 +47,8 @@ export default ({
   const state = {
     timeCreate: Date.now(),
     timeOnStart: performance.now(),
-    timeOnLastActive: null,
     timeOnActive: null,
+    timeOnLastActive: null,
     bytesIncoming: 0,
     ctx: null,
     count: 0,
@@ -69,6 +69,8 @@ export default ({
       }
     }
   };
+
+  const calcTimeByRequest = () => performance.now() - state.ctx.request.timeOnStart;
 
   const doResponseError = (ctx) => {
     if (!controller.signal.aborted) {
@@ -211,6 +213,7 @@ export default ({
         ctx.request.path = ret.path || '/';
         ctx.request.pathname = pathname || '/';
         ctx.request.querystring = querystring;
+        ctx.request.timeOnStartLine = calcTimeByRequest();
         if (querystring) {
           const query = qs.parse(querystring);
           if (qs.stringify(query) === querystring) {
@@ -226,6 +229,7 @@ export default ({
         state.step = 2;
         ctx.request.headersRaw = ret.headersRaw;
         ctx.request.headers = ret.headers;
+        ctx.request.timeOnHeader = calcTimeByRequest();
         if (onHttpRequestHeader) {
           await onHttpRequestHeader(ctx);
           assert(!controller.signal.aborted);
@@ -309,6 +313,9 @@ export default ({
       },
       onBody: (chunk) => {
         assert(!controller.signal.aborted);
+        if (ctx.request.timeOnBody == null) {
+          ctx.request.timeOnBody = calcTimeByRequest();
+        }
         if (state.step === 2) {
           state.step = 3;
         }
@@ -322,6 +329,10 @@ export default ({
       },
       onEnd: async () => {
         state.step = 4;
+        ctx.request.timeOnEnd = calcTimeByRequest();
+        if (ctx.request.timeOnBody == null) {
+          ctx.request.timeOnBody = ctx.request.timeOnEnd;
+        }
         if (!ctx.request.connection) {
           if (ctx.request._write) {
             ctx.request._write();
@@ -360,6 +371,11 @@ export default ({
       socket,
       request: {
         timeCreate: Date.now(),
+        timeOnStart: performance.now(),
+        timeOnStartLine: null,
+        timeOnHeader: null,
+        timeOnBody: null,
+        timeOnEnd: null,
         connection: false,
         method: null,
         path: null,
@@ -429,12 +445,13 @@ export default ({
         assert(!controller.signal.aborted);
         const size = chunk.length;
         state.bytesIncoming += size;
+        const now = performance.now();
         if (state.timeOnActive == null) {
-          state.timeOnLastActive = performance.now();
+          state.timeOnLastActive = now;
         } else {
           state.timeOnLastActive = state.timeOnActive;
         }
-        state.timeOnActive = performance.now();
+        state.timeOnActive = now;
         if (!state.ctx) {
           attachContext();
         }
