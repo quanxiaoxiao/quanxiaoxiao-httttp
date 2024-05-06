@@ -45,7 +45,7 @@ export default ({
   const controller = new AbortController();
 
   const state = {
-    timeCreate: Date.now(),
+    dateTimeCreate: Date.now(),
     timeOnStart: performance.now(),
     timeOnActive: null,
     timeOnLastActive: null,
@@ -370,7 +370,7 @@ export default ({
     state.ctx = {
       socket,
       request: {
-        timeCreate: Date.now(),
+        dateTimeCreate: Date.now(),
         timeOnStart: performance.now(),
         timeOnStartLine: null,
         timeOnHeader: null,
