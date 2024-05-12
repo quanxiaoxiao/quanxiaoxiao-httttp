@@ -106,6 +106,7 @@ export default ({
     if (!controller.signal.aborted && ctx.socket.writable) {
       if (ctx.response && ctx.response.body instanceof Readable) {
         const encodeHttpResponse = encodeHttp({
+          statusCode: ctx.response.statusCode || 200,
           headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
           body: new PassThrough(),
           onHeader: (chunk) => {

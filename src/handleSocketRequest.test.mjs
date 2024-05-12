@@ -1266,6 +1266,72 @@ test('handleSocketRequest request body with stream', () => {
   }, 100);
 });
 
+test('handleSocketRequest request body with stream 2', async () => {
+  const port = getPort();
+  const onHttpError = mock.fn(() => {});
+  const onHttpResponseEnd = mock.fn(() => {
+  });
+
+  const onHttpRequestEnd = mock.fn((ctx) => {
+    const stream = new PassThrough();
+    ctx.response = {
+      statusCode: 206,
+      headers: {
+        name: 'quan',
+      },
+      body: stream,
+    };
+    setTimeout(() => {
+      stream.end('aaa');
+    }, 100);
+  });
+
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpResponseEnd,
+      onHttpRequestEnd,
+      onHttpError,
+    });
+  });
+  server.listen(port);
+
+  const state = {
+    connector: null,
+  };
+
+  const onClose = mock.fn(() => {});
+  const onError = mock.fn(() => {});
+  const onData = mock.fn((chunk) => {
+    if (onData.mock.calls.length === 0) {
+      assert(chunk.toString().includes(206));
+      assert(chunk.toString().includes('quan'));
+    }
+  });
+  state.connector = createConnector(
+    {
+      onData,
+      onClose,
+      onError,
+    },
+    () => connect(port),
+  );
+  state.connector.write(encodeHttp({
+    method: 'GET',
+    path: '/aaa',
+    body: null,
+    headers: {
+      name: 'quan',
+    },
+  }));
+  await waitFor(1500);
+  state.connector();
+  server.close();
+  assert.equal(onData.mock.calls.length, 2);
+  assert.equal(onClose.mock.calls.length, 0);
+  assert.equal(onError.mock.calls.length, 0);
+});
+
 test('handleSocketRequest ctx.onResponse', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
