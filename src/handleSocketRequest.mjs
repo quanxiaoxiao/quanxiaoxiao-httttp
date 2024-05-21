@@ -1,5 +1,4 @@
 import { Buffer } from 'node:buffer';
-import qs from 'node:querystring';
 import assert from 'node:assert';
 import { PassThrough, Readable } from 'node:stream';
 import createError from 'http-errors';
@@ -7,6 +6,7 @@ import { createConnector } from '@quanxiaoxiao/socket';
 import {
   decodeHttpRequest,
   encodeHttp,
+  parseHttpPath,
 } from '@quanxiaoxiao/http-utils';
 import {
   HttpParserError,
@@ -208,19 +208,14 @@ export default ({
     state.execute = decodeHttpRequest({
       onStartLine: async (ret) => {
         state.step = 1;
-        const [pathname, querystring = ''] = ret.path.split('?');
+        ctx.request.timeOnStartLine = calcTimeByRequest();
         ctx.request.httpVersion = ret.httpVersion;
         ctx.request.method = ret.method;
-        ctx.request.path = ret.path || '/';
-        ctx.request.pathname = pathname || '/';
+        const [pathname, querystring, query] = parseHttpPath(ret.path);
+        ctx.request.path = ret.path;
+        ctx.request.pathname = pathname;
         ctx.request.querystring = querystring;
-        ctx.request.timeOnStartLine = calcTimeByRequest();
-        if (querystring) {
-          const query = qs.parse(querystring);
-          if (qs.stringify(query) === querystring) {
-            ctx.request.query = query;
-          }
-        }
+        ctx.request.query = query;
         if (onHttpRequestStartLine) {
           await onHttpRequestStartLine(ctx);
           assert(!controller.signal.aborted);
