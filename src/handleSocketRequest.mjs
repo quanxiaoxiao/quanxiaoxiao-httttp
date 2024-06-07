@@ -159,7 +159,7 @@ export default ({
 
   const doForward = async (ctx) => {
     assert(ctx.requestForward);
-    if (!ctx.onResponse) {
+    if (!ctx.onResponse && !ctx.requestForward.onBody) {
       ctx.requestForward.onBody = new PassThrough();
     }
     forwardRequest({

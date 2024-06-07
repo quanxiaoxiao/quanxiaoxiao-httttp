@@ -1,5 +1,5 @@
 /* eslint no-use-before-define: 0 */
-import { PassThrough } from 'node:stream';
+import { PassThrough, Transform } from 'node:stream';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, mock } from 'node:test';
@@ -1598,12 +1598,7 @@ test('handleSocketRequest with forwardRequest', async () => {
 
   await waitFor(100);
 
-  const onData = mock.fn((chunk) => {
-    assert.equal(
-      chunk.toString(),
-      'HTTP/1.1 200 OK\r\nserver: quan\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nfoo\r\n0\r\n\r\n',
-    );
-  });
+  const onData = mock.fn(() => {});
   const onClose = mock.fn(() => {});
   const onError = mock.fn(() => {});
 
@@ -1634,10 +1629,88 @@ test('handleSocketRequest with forwardRequest', async () => {
   assert.equal(onClose.mock.calls.length, 0);
   assert.equal(onError.mock.calls.length, 0);
   assert.equal(onData.mock.calls.length, 1);
+  assert.equal(
+    onData.mock.calls[0].arguments[0].toString(),
+    'HTTP/1.1 200 OK\r\nserver: quan\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nfoo\r\n0\r\n\r\n',
+  );
   assert.equal(onHttpError.mock.calls.length, 0);
   assert.equal(onHttpRequestEnd.mock.calls.length, 1);
   assert.equal(onHttpResponseEnd.mock.calls.length, 1);
   state.connector();
+
+  server1.close();
+  server2.close();
+});
+
+test('handleSocketRequest with forwardRequest 2', async () => {
+  const port1 = getPort();
+  const port2 = getPort();
+  const handleDataOnRemoteSocket = mock.fn(() => {});
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    const transform = new Transform({
+      transform(chunk, encoding, callback) {
+        callback(null, Buffer.concat([Buffer.from('aaa'), chunk]));
+      },
+    });
+    ctx.requestForward = {
+      hostname: '127.0.0.1',
+      port: port2,
+      onBody: transform,
+    };
+  });
+
+  const onHttpError = mock.fn(() => {});
+  const server1 = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpRequestHeader,
+      onHttpError,
+    });
+  });
+  server1.listen(port1);
+
+  const server2 = net.createServer((socket) => {
+    socket.on('data', handleDataOnRemoteSocket);
+    setTimeout(() => {
+      socket.end(encodeHttp({
+        headers: {
+          Server: 'quan',
+        },
+        body: 'foo',
+      }));
+    }, 500);
+  });
+
+  server2.listen(port2);
+
+  await waitFor(100);
+
+  const onData = mock.fn(() => {});
+  const onClose = mock.fn(() => {});
+  const onError = mock.fn(() => {});
+
+  const state = {
+    connector: null,
+  };
+  state.connector = createConnector(
+    {
+      onData,
+      onClose,
+      onError,
+    },
+    () => connect(port1),
+  );
+
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
+
+  await waitFor(1500);
+  state.connector();
+
+  assert.equal(onData.mock.calls.length, 1);
+  assert.equal(
+    onData.mock.calls[0].arguments[0].toString(),
+    'HTTP/1.1 200 OK\r\nserver: quan\r\nTransfer-Encoding: chunked\r\n\r\n6\r\naaafoo\r\n0\r\n\r\n',
+  );
 
   server1.close();
   server2.close();
