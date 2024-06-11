@@ -52,6 +52,12 @@ export default async ({
       ctx.requestForward.headers = ctx.request.headers || {};
     }
   }
+  if (ctx.requestForward.onConnecting) {
+    await ctx.requestForward.onConnecting(ctx);
+    if (signal) {
+      assert(!signal.aborted);
+    }
+  }
 
   if (onForwardConnecting) {
     await onForwardConnecting(ctx);
@@ -86,6 +92,12 @@ export default async ({
   }
 
   requestForwardOptions.onRequest = async () => {
+    if (ctx.requestForward.onConnect) {
+      await ctx.requestForward.onConnect(ctx);
+      if (signal) {
+        assert(!signal.aborted);
+      }
+    }
     if (onForwardConnect) {
       await onForwardConnect(ctx);
     }

@@ -186,11 +186,17 @@ export default ({
       })
       .then(
         () => {
+          if (ctx.requestForward.onSuccess) {
+            ctx.requestForward.onSuccess(ctx);
+          }
           doResponseEnd();
         },
         (error) => {
+          ctx.error = error;
+          if (ctx.requestForward.onError) {
+            ctx.requestForward.onError(ctx);
+          }
           if (!controller.signal.aborted) {
-            ctx.error = error;
             if (error instanceof HttpParserError) {
               ctx.error.statusCode = 502;
             } else if (error instanceof NetConnectTimeoutError) {
