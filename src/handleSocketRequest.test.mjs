@@ -565,31 +565,22 @@ test('handleSocketRequest ctx.onRequest  with request body, unbind response 503'
 
 test('handleSocketRequest request with no body ctx.onRequest', async () => {
   const port = getPort();
-  const onRequest = mock.fn((ctx) => {
-    assert.equal(ctx.response, null);
-    ctx.response = {
-      headers: {
-        name: 'quan',
-      },
-      body: 'xxx',
-    };
-  });
   const onHttpError = mock.fn(() => {});
+  const handleDataOnRequestBody = mock.fn(() => {
+  });
   const onHttpRequestEnd = mock.fn((ctx) => {
     assert.equal(ctx.response, null);
   });
-  const onHttpResponseEnd = mock.fn((ctx) => {
-    assert.deepEqual(ctx.response, {
-      headers: {
-        name: 'quan',
-      },
-      body: 'xxx',
-    });
+  const onHttpResponseEnd = mock.fn(() => {
   });
 
+  const pass = new PassThrough();
+
   const onHttpRequestHeader = mock.fn((ctx) => {
-    ctx.onRequest = onRequest;
+    ctx.request.body = pass;
   });
+
+  pass.on('data', handleDataOnRequestBody);
 
   const server = net.createServer((socket) => {
     handleSocketRequest({
@@ -606,9 +597,7 @@ test('handleSocketRequest request with no body ctx.onRequest', async () => {
     connector: null,
   };
 
-  const onData = mock.fn((chunk) => {
-    assert(/^HTTP\/1\.1 200/.test(chunk.toString()));
-  });
+  const onData = mock.fn(() => {});
 
   const onClose = mock.fn(() => {});
   const onError = mock.fn(() => {
@@ -623,16 +612,21 @@ test('handleSocketRequest request with no body ctx.onRequest', async () => {
     () => connect(port),
   );
 
-  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n\r\naaa'));
+  await waitFor(200);
+  state.connector.write(Buffer.from('ccc'));
 
   await waitFor(1000);
   assert.equal(onClose.mock.calls.length, 0);
   assert.equal(onError.mock.calls.length, 0);
-  assert.equal(onData.mock.calls.length, 1);
+  assert.equal(onData.mock.calls.length, 0);
   assert.equal(onHttpError.mock.calls.length, 0);
   assert.equal(onHttpRequestHeader.mock.calls.length, 1);
-  assert.equal(onHttpResponseEnd.mock.calls.length, 1);
-  assert.equal(onHttpRequestEnd.mock.calls.length, 1);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 0);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 0);
+  assert.equal(handleDataOnRequestBody.mock.calls.length, 2);
+  assert.equal(handleDataOnRequestBody.mock.calls[0].arguments[0].toString(), '\r\naaa');
+  assert.equal(handleDataOnRequestBody.mock.calls[1].arguments[0].toString(), 'ccc');
   state.connector();
   server.close();
 });
@@ -663,8 +657,7 @@ test('handleSocketRequest request with no body, error with onHttpRequestEnd set 
   });
 
   const onClose = mock.fn(() => {});
-  const onError = mock.fn(() => {
-  });
+  const onError = mock.fn(() => {});
 
   state.connector = createConnector(
     {
@@ -675,7 +668,7 @@ test('handleSocketRequest request with no body, error with onHttpRequestEnd set 
     () => connect(port),
   );
 
-  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 0\r\n\r\n'));
 
   await waitFor(1000);
   assert.equal(onData.mock.calls.length, 1);
@@ -789,7 +782,7 @@ test('handleSocketRequest request with no body', async () => {
     () => connect(port),
   );
 
-  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 0\r\n\r\n'));
 
   await waitFor(1000);
   assert.equal(onClose.mock.calls.length, 1);
@@ -851,7 +844,7 @@ test('handleSocketRequest request with no body, onHttpRequestEnd set response', 
     () => connect(port),
   );
 
-  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 0\r\n\r\n'));
 
   await waitFor(1000);
   assert.equal(onClose.mock.calls.length, 0);
@@ -1396,7 +1389,7 @@ test('handleSocketRequest ctx.onResponse', async () => {
     () => connect(port),
   );
 
-  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 0\r\n\r\n'));
 
   await waitFor(1000);
 
@@ -1453,7 +1446,7 @@ test('handleSocketRequest ctx.onResponse trigger error', async () => {
     () => connect(port),
   );
 
-  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 0\r\n\r\n'));
 
   await waitFor(1000);
   assert.equal(onClose.mock.calls.length, 1);
@@ -1531,7 +1524,7 @@ test('handleSocketRequest POST and GET', async () => {
     () => connect(port),
   );
 
-  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 0\r\n\r\n'));
 
   setTimeout(() => {
     state.connector.write(Buffer.from('POST /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 3\r\n\r\naaa'));
@@ -2036,7 +2029,7 @@ test('handleSocketRequest forwardRequest response body with stream', async () =>
     },
     () => connect(port1),
   );
-  state.connector.write('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n');
+  state.connector.write('GET /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 0\r\n\r\n');
 });
 
 test('handleSocketRequest with forwardRequest, remote server response invalid', async () => {
@@ -2100,7 +2093,7 @@ test('handleSocketRequest with forwardRequest, remote server response invalid', 
     () => connect(port1),
   );
 
-  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 0\r\n\r\n'));
 
   await waitFor(1500);
   assert.equal(onClose.mock.calls.length, 1);
@@ -2176,7 +2169,7 @@ test('handleSocketRequest with forwardRequest, remote server close', async () =>
     () => connect(port1),
   );
 
-  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\n\r\n'));
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 0\r\n\r\n'));
 
   await waitFor(1500);
   assert.equal(onClose.mock.calls.length, 1);

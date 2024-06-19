@@ -210,6 +210,48 @@ export default ({
       );
   };
 
+  const attachRequestBodyStream = (ctx) => {
+    if (!ctx.request.body) {
+      ctx.request.body = new PassThrough();
+    }
+    ctx.request._write = wrapStreamWrite({
+      stream: ctx.request.body,
+      signal: controller.signal,
+      onPause: () => {
+        state.connector.pause();
+      },
+      onDrain: () => {
+        state.connector.resume();
+      },
+      onError: (error) => {
+        if (!controller.signal.aborted) {
+          ctx.error = new Error(`request body stream, \`${error.message}\``);
+          doResponseError(ctx);
+        }
+      },
+      onEnd: () => {
+        if (onHttpRequestEnd) {
+          promisee(onHttpRequestEnd, ctx)
+            .then(
+              () => {
+                assert(!Object.hasOwnProperty.call(ctx, 'onRequest'));
+              },
+            )
+            .then(
+              () => {
+                if (!controller.signal.aborted && !ctx.requestForward) {
+                  doResponse(ctx);
+                }
+              },
+              (error) => handleError(error, ctx),
+            );
+        } else if (!ctx.requestForward) {
+          doResponse(ctx);
+        }
+      },
+    });
+  };
+
   const bindExcute = (ctx) => {
     state.execute = decodeHttpRequest({
       onStartLine: async (ret) => {
@@ -264,46 +306,17 @@ export default ({
           }
         } else if (!Object.hasOwnProperty.call(ctx, 'onRequest')) {
           if (ctx.request.headers['content-length'] > 0
-              || /^chunked$/i.test(ctx.request.headers['transfer-encoding'])) {
-            if (!ctx.request.body) {
-              ctx.request.body = new PassThrough();
+              || /^chunked$/i.test(ctx.request.headers['transfer-encoding'])
+              || (!Object.hasOwnProperty.call(ctx.request.headers, 'content-length') && !Object.hasOwnProperty.call(ctx.request.headers, 'transfer-encoding'))
+            ) {
+            if (!ctx.requestForward &&
+              !Object.hasOwnProperty.call(ctx.request.headers, 'content-length')
+              && !Object.hasOwnProperty.call(ctx.request.headers, 'transfer-encoding')
+              && !(ctx.request.body instanceof Readable)
+            ) {
+              throw createError(400);
             }
-            ctx.request._write = wrapStreamWrite({
-              stream: ctx.request.body,
-              signal: controller.signal,
-              onPause: () => {
-                state.connector.pause();
-              },
-              onDrain: () => {
-                state.connector.resume();
-              },
-              onError: (error) => {
-                if (!controller.signal.aborted) {
-                  ctx.error = new Error(`request body stream, \`${error.message}\``);
-                  doResponseError(ctx);
-                }
-              },
-              onEnd: () => {
-                if (onHttpRequestEnd) {
-                  promisee(onHttpRequestEnd, ctx)
-                    .then(
-                      () => {
-                        assert(!Object.hasOwnProperty.call(ctx, 'onRequest'));
-                      },
-                    )
-                    .then(
-                      () => {
-                        if (!controller.signal.aborted && !ctx.requestForward) {
-                          doResponse(ctx);
-                        }
-                      },
-                      (error) => handleError(error, ctx),
-                    );
-                } else if (!ctx.requestForward) {
-                  doResponse(ctx);
-                }
-              },
-            });
+            attachRequestBodyStream(ctx);
           }
 
           if (ctx.requestForward) {
@@ -311,6 +324,10 @@ export default ({
           }
         } else {
           assert(typeof ctx.onRequest === 'function');
+          if (!Object.hasOwnProperty.call(ctx.request.headers, 'content-length')
+            && !Object.hasOwnProperty.call(ctx.request.headers, 'transfer-encoding')) {
+            throw createError(400);
+          }
         }
       },
       onBody: (chunk) => {
