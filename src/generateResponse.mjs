@@ -29,28 +29,32 @@ export default (ctx) => {
   if (!Array.isArray(response.headers)) {
     response.headers = convertObjectToArray(response.headers);
   }
-  if (ctx.response.data) {
-    response.headers = filterHeaders(
-      response.headers,
-      ['content-encoding'],
-    );
-    if (ctx.request && ctx.request.headers && /\bgzip\b/i.test(ctx.request.headers['accept-encoding'])) {
-      response.headers = setHeaders(
-        response.headers,
-        {
-          'Content-Type': 'application/json',
-          'Content-Encoding': 'gzip',
-        },
-      );
-      response.body = zlib.gzipSync(JSON.stringify(ctx.response.data));
+  if (Object.hasOwnProperty.call(ctx.response, 'data')) {
+    if (ctx.response.data == null) {
+      response.body = null;
     } else {
-      response.headers = setHeaders(
+      response.headers = filterHeaders(
         response.headers,
-        {
-          'Content-Type': 'application/json',
-        },
+        ['content-encoding'],
       );
-      response.body = JSON.stringify(ctx.response.data);
+      if (ctx.request && ctx.request.headers && /\bgzip\b/i.test(ctx.request.headers['accept-encoding'])) {
+        response.headers = setHeaders(
+          response.headers,
+          {
+            'Content-Type': 'application/json',
+            'Content-Encoding': 'gzip',
+          },
+        );
+        response.body = zlib.gzipSync(JSON.stringify(ctx.response.data));
+      } else {
+        response.headers = setHeaders(
+          response.headers,
+          {
+            'Content-Type': 'application/json',
+          },
+        );
+        response.body = JSON.stringify(ctx.response.data);
+      }
     }
   }
   assert(response.statusCode >= 0 && response.statusCode <= 999);

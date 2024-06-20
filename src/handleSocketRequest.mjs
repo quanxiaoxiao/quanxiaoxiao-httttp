@@ -1,31 +1,28 @@
 import { Buffer } from 'node:buffer';
 import assert from 'node:assert';
-import { PassThrough, Readable } from 'node:stream';
+import {
+  PassThrough,
+  Readable,
+  Writable,
+} from 'node:stream';
 import createError from 'http-errors';
 import { createConnector } from '@quanxiaoxiao/socket';
 import {
   decodeHttpRequest,
   encodeHttp,
   parseHttpPath,
+  isHttpStream,
+  hasHttpBodyContent,
 } from '@quanxiaoxiao/http-utils';
 import {
   HttpParserError,
-  NetConnectTimeoutError,
-  SocketCloseError,
 } from '@quanxiaoxiao/http-request';
 import {
   wrapStreamWrite,
   wrapStreamRead,
 } from '@quanxiaoxiao/node-utils';
-import forwardRequest from './forwardRequest.mjs';
-import forwardWebsocket from './forwardWebsocket.mjs';
 import attachResponseError from './attachResponseError.mjs';
 import generateResponse from './generateResponse.mjs';
-
-const promisee = async (fn, ...args) => {
-  const ret = await fn(...args);
-  return ret;
-};
 
 export default ({
   socket,
@@ -33,14 +30,10 @@ export default ({
   onHttpRequest,
   onHttpRequestStartLine,
   onHttpRequestHeader,
-  onHttpRequestConnection,
   onHttpRequestEnd,
-  onForwardConnecting,
-  onForwardConnect,
+  onHttpResponse,
   onHttpResponseEnd,
   onHttpError,
-  onChunkIncoming,
-  onChunkOutgoing,
 }) => {
   const controller = new AbortController();
 
@@ -50,11 +43,29 @@ export default ({
     timeOnActive: null,
     timeOnLastActive: null,
     bytesIncoming: 0,
+    bytesOutgoing: 0,
     ctx: null,
     count: 0,
     step: -1,
     execute: null,
     connector: null,
+  };
+
+  const sendBuffer = (buf) => {
+    const len = buf.length;
+    if (!controller.signal.aborted && len > 0) {
+      try {
+        const ret = state.connector.write(buf);
+        state.bytesOutgoing += len;
+        return ret;
+      } catch (error) { // eslint-disable-line
+        if (!controller.signal.aborted) {
+          controller.abort();
+        }
+        return false;
+      }
+    }
+    return false;
   };
 
   const doResponseEnd = () => {
@@ -103,14 +114,24 @@ export default ({
 
   const doResponse = async (ctx) => {
     assert(!ctx.error);
-    if (!controller.signal.aborted && ctx.socket.writable) {
+    if (!controller.signal.aborted && onHttpResponse) {
+      try {
+        await onHttpResponse(ctx);
+      } catch (error) {
+        handleError(error, ctx);
+      }
+    }
+    if (!ctx.error
+      && !controller.signal.aborted
+      && ctx.socket.writable) {
       if (ctx.response && ctx.response.body instanceof Readable) {
+        assert(!Object.hasOwnProperty.call(ctx.response, 'data'));
         const encodeHttpResponse = encodeHttp({
           statusCode: ctx.response.statusCode || 200,
           headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
           body: new PassThrough(),
           onHeader: (chunk) => {
-            state.connector.write(Buffer.concat([chunk, Buffer.from('\r\n')]));
+            sendBuffer(Buffer.concat([chunk, Buffer.from('\r\n')]));
           },
         });
         process.nextTick(() => {
@@ -118,138 +139,38 @@ export default ({
             wrapStreamRead({
               signal: controller.signal,
               stream: ctx.response.body,
-              onData: (chunk) => state.connector.write(encodeHttpResponse(chunk)),
+              onData: (chunk) => sendBuffer(encodeHttpResponse(chunk)),
               onEnd: () => {
-                try {
-                  state.connector.write(encodeHttpResponse());
-                } catch (error) {
-                  if (!controller.signal.aborted) {
-                    controller.abort();
-                    ctx.error = error;
-                    if (onClose) {
-                      onClose(ctx);
-                    }
-                  }
-                }
+                sendBuffer(encodeHttpResponse());
                 if (!controller.signal.aborted) {
                   doResponseEnd();
                 }
               },
-              onError: (error) => handleError(error, ctx),
+              onError: (error) => {
+                console.warn(`response.body stream error \`${error.message}\``);
+                if (!controller.signal.aborted) {
+                  state.connector();
+                  controller.abort();
+                }
+              },
             });
           } catch (error) {
-            handleError(error, ctx);
+            console.warn(error);
+            if (!controller.signal.aborted) {
+              state.connector();
+              controller.abort();
+            }
           }
         });
       } else {
         try {
-          if (ctx.onResponse) {
-            await ctx.onResponse(ctx);
-            assert(!controller.signal.aborted);
-          }
-          const response = generateResponse(ctx);
-          state.connector.write(encodeHttp(response));
+          sendBuffer(encodeHttp(generateResponse(ctx)));
           doResponseEnd();
         } catch (error) {
           handleError(error, ctx);
         }
       }
     }
-  };
-
-  const doForward = async (ctx) => {
-    assert(ctx.requestForward);
-    if (!ctx.onResponse && !ctx.requestForward.onBody) {
-      ctx.requestForward.onBody = new PassThrough();
-    }
-    forwardRequest({
-      ctx,
-      signal: controller.signal,
-      onForwardConnecting,
-      onForwardConnect,
-      onChunkIncoming,
-    })
-      .then(
-        () => {
-          assert(!controller.signal.aborted);
-        },
-      )
-      .then(() => {
-        if (ctx.onResponse) {
-          return promisee(ctx.onResponse, ctx)
-            .then(() => {
-              assert(!controller.signal.aborted);
-              state.connector.write(encodeHttp(generateResponse(ctx)));
-            });
-        }
-        return Promise.resolve(ctx);
-      })
-      .then(
-        () => {
-          if (ctx.requestForward.onSuccess) {
-            ctx.requestForward.onSuccess(ctx);
-          }
-          doResponseEnd();
-        },
-        (error) => {
-          ctx.error = error;
-          if (ctx.requestForward.onError) {
-            ctx.requestForward.onError(ctx);
-          }
-          if (!controller.signal.aborted) {
-            if (error instanceof HttpParserError) {
-              ctx.error.statusCode = 502;
-            } else if (error instanceof NetConnectTimeoutError) {
-              ctx.error.statusCode = 504;
-            } else if (error instanceof SocketCloseError) {
-              ctx.error.statusCode = 502;
-            }
-            doResponseError(ctx);
-          }
-        },
-      );
-  };
-
-  const attachRequestBodyStream = (ctx) => {
-    if (!ctx.request.body) {
-      ctx.request.body = new PassThrough();
-    }
-    ctx.request._write = wrapStreamWrite({
-      stream: ctx.request.body,
-      signal: controller.signal,
-      onPause: () => {
-        state.connector.pause();
-      },
-      onDrain: () => {
-        state.connector.resume();
-      },
-      onError: (error) => {
-        if (!controller.signal.aborted) {
-          ctx.error = new Error(`request body stream, \`${error.message}\``);
-          doResponseError(ctx);
-        }
-      },
-      onEnd: () => {
-        if (onHttpRequestEnd) {
-          promisee(onHttpRequestEnd, ctx)
-            .then(
-              () => {
-                assert(!Object.hasOwnProperty.call(ctx, 'onRequest'));
-              },
-            )
-            .then(
-              () => {
-                if (!controller.signal.aborted && !ctx.requestForward) {
-                  doResponse(ctx);
-                }
-              },
-              (error) => handleError(error, ctx),
-            );
-        } else if (!ctx.requestForward) {
-          doResponse(ctx);
-        }
-      },
-    });
   };
 
   const bindExcute = (ctx) => {
@@ -270,6 +191,7 @@ export default ({
         }
       },
       onHeader: async (ret) => {
+        assert(state.step === 1);
         state.step = 2;
         ctx.request.headersRaw = ret.headersRaw;
         ctx.request.headers = ret.headers;
@@ -278,106 +200,63 @@ export default ({
           await onHttpRequestHeader(ctx);
           assert(!controller.signal.aborted);
         }
-        if (ctx.request.headers.upgrade) {
-          if (!/^websocket$/i.test(ctx.request.headers.upgrade)) {
-            throw createError(510);
+        if (isHttpStream(ctx.request.headers)) {
+          throw createError(400);
+        }
+        if (hasHttpBodyContent(ctx.request.headers)) {
+          if (ctx.request.body == null) {
+            ctx.request.body = new PassThrough();
           }
-          if (ctx.request.method !== 'GET') {
-            throw createError(400);
-          }
-          if (!ctx.requestForward) {
-            throw createError(510);
-          }
-          ctx.request.connection = true;
-          if (onHttpRequestConnection) {
-            await onHttpRequestConnection(ctx);
-            assert(!controller.signal.aborted);
-          }
-          if (state.connector.detach()) {
-            forwardWebsocket({
-              ctx,
-              onForwardConnect,
-              onForwardConnecting,
-              onChunkIncoming,
-              onChunkOutgoing,
-              onHttpResponseEnd,
-              onHttpError,
-            });
-          }
-        } else if (!Object.hasOwnProperty.call(ctx, 'onRequest')) {
-          if (ctx.request.headers['content-length'] > 0
-              || /^chunked$/i.test(ctx.request.headers['transfer-encoding'])
-              || (!Object.hasOwnProperty.call(ctx.request.headers, 'content-length') && !Object.hasOwnProperty.call(ctx.request.headers, 'transfer-encoding'))
-            ) {
-            if (!ctx.requestForward &&
-              !Object.hasOwnProperty.call(ctx.request.headers, 'content-length')
-              && !Object.hasOwnProperty.call(ctx.request.headers, 'transfer-encoding')
-              && !(ctx.request.body instanceof Readable)
-            ) {
-              throw createError(400);
-            }
-            attachRequestBodyStream(ctx);
-          }
-
-          if (ctx.requestForward) {
-            doForward(ctx);
-          }
-        } else {
-          assert(typeof ctx.onRequest === 'function');
-          if (!Object.hasOwnProperty.call(ctx.request.headers, 'content-length')
-            && !Object.hasOwnProperty.call(ctx.request.headers, 'transfer-encoding')) {
-            throw createError(400);
-          }
+          assert(ctx.request.body instanceof Writable);
+          assert(ctx.request.body instanceof Readable);
+          ctx.request._write = wrapStreamWrite({
+            stream: ctx.request.body,
+            signal: controller.signal,
+            onPause: () => {
+              state.connector.pause();
+            },
+            onDrain: () => {
+              state.connector.resume();
+            },
+            onError: (error) => {
+              if (!controller.signal.aborted) {
+                ctx.error = new Error(`request body stream, \`${error.message}\``);
+                doResponseError(ctx);
+              }
+            },
+            onEnd: () => {
+              doResponse(ctx);
+            },
+          });
+        } else if (ctx.request.body != null) {
+          ctx.request.body = null;
         }
       },
       onBody: (chunk) => {
         assert(!controller.signal.aborted);
         if (ctx.request.timeOnBody == null) {
           ctx.request.timeOnBody = calcTimeByRequest();
-        }
-        if (state.step === 2) {
+          assert(state.step === 2);
           state.step = 3;
         }
-        if (!ctx.request.connection) {
-          if (ctx.onRequest) {
-            ctx.request.body = ctx.request.body ? Buffer.concat([ctx.request.body, chunk]) : chunk;
-          } else {
-            ctx.request._write(chunk);
-          }
-        }
+        assert(ctx.request._write);
+        ctx.request._write(chunk);
       },
       onEnd: async () => {
+        assert(state.step < 4);
         state.step = 4;
         ctx.request.timeOnEnd = calcTimeByRequest();
         if (ctx.request.timeOnBody == null) {
           ctx.request.timeOnBody = ctx.request.timeOnEnd;
         }
-        if (!ctx.request.connection) {
-          if (ctx.request._write) {
-            ctx.request._write();
-          } else {
-            if (onHttpRequestEnd) {
-              const isOnResponseUnbind = !Object.hasOwnProperty.call(ctx, 'onRequest');
-              await onHttpRequestEnd(ctx);
-              assert(!controller.signal.aborted);
-              if (isOnResponseUnbind) {
-                assert(!Object.hasOwnProperty.call(ctx, 'onRequest'));
-              }
-            }
-            if (ctx.onRequest) {
-              await ctx.onRequest(ctx);
-              assert(!controller.signal.aborted);
-              if (ctx.response) {
-                doResponse(ctx);
-              } else if (ctx.requestForward) {
-                doForward(ctx);
-              } else {
-                throw createError(503);
-              }
-            } else if (!ctx.requestForward) {
-              doResponse(ctx);
-            }
-          }
+        if (onHttpRequestEnd) {
+          await onHttpRequestEnd(ctx);
+          assert(!controller.signal.aborted);
+        }
+        if (ctx.request._write) {
+          ctx.request._write();
+        } else {
+          doResponse(ctx);
         }
       },
     });
@@ -412,7 +291,7 @@ export default ({
     if (onHttpRequest) {
       try {
         onHttpRequest(state.ctx);
-        assert(state.ctx.response === null);
+        assert(state.ctx.response == null);
       } catch (error) {
         state.ctx.error = error;
       }
@@ -428,15 +307,15 @@ export default ({
     state.execute(chunk)
       .then(
         (ret) => {
-          if (ret.complete && ret.dataBuf.length > 0) {
-            if (!controller.signal.aborted) {
-              if (state.ctx) {
-                state.ctx.error = createError(400);
-                doResponseError(state.ctx);
-              } else {
-                state.connector();
-                controller.abort();
-              }
+          if (!controller.signal.aborted
+            && ret.complete
+            && ret.dataBuf.length > 0) {
+            if (state.ctx) {
+              state.ctx.error = createError(400);
+              doResponseError(state.ctx);
+            } else {
+              state.connector();
+              controller.abort();
             }
           }
         },
@@ -475,9 +354,6 @@ export default ({
           attachContext();
         }
         if (!controller.signal.aborted && size > 0) {
-          if (onChunkOutgoing) {
-            onChunkOutgoing(state.ctx, chunk);
-          }
           execute(chunk);
         }
       },
