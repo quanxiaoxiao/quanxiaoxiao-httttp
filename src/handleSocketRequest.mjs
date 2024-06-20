@@ -267,6 +267,7 @@ export default ({
     state.count += 1;
     state.ctx = {
       socket,
+      signal: controller.signal,
       request: {
         dateTimeCreate: Date.now(),
         timeOnStart: performance.now(),
