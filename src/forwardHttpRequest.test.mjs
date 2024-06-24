@@ -159,3 +159,47 @@ test('forwardRequest 2', async () => {
   assert.equal(ctx.response.body.toString(), 'ok');
   server.close();
 });
+
+test('forwardRequest request body 1', async () => {
+  const port = getPort();
+  const onRequestSocketData = mock.fn(() => {});
+  const onRequestSocketClose = mock.fn(() => {});
+  const server = net.createServer((socket) => {
+    socket.on('data', onRequestSocketData);
+    socket.on('close', onRequestSocketClose);
+    const encode = encodeHttp({
+      statusCode: 200,
+      headers: {
+        name: 'quan',
+      },
+    });
+    setTimeout(() => {
+      socket.write(Buffer.concat([
+        encode('ccc'),
+        encode(),
+      ]));
+    }, 100);
+  });
+  server.listen(port);
+  await waitFor(100);
+  const ctx = {};
+  forwardHttpRequest({
+    ctx,
+    options: {
+      path: '/test',
+      port,
+      body: 'aaa',
+    },
+  });
+  await waitFor(1000);
+  assert.equal(onRequestSocketData.mock.calls.length, 1);
+  assert.equal(onRequestSocketClose.mock.calls.length, 1);
+  assert.equal(ctx.response.headers['transfer-encoding'], 'chunked');
+  assert.equal(
+    onRequestSocketData.mock.calls[0].arguments[0].toString(),
+    'GET /test HTTP/1.1\r\nContent-Length: 3\r\n\r\naaa',
+  );
+  assert.equal(ctx.response.statusCode, 200);
+  assert.equal(ctx.response.body.toString(), 'ccc');
+  server.close();
+});
