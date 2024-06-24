@@ -45,7 +45,7 @@ export default ({
       onBody: ctx.response && ctx.response.body ? ctx.response.body : null,
       onRequest: async (requestOptions, state) => {
         if (onRequest) {
-          await onRequest(requestOptions, state);
+          await onRequest(ctx, state);
         }
       },
       onStartLine: async (state) => {
