@@ -1,4 +1,3 @@
-import { Buffer } from 'node:buffer';
 import assert from 'node:assert';
 import {
   PassThrough,
@@ -131,7 +130,7 @@ export default ({
           headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
           body: new PassThrough(),
           onHeader: (chunk) => {
-            sendBuffer(Buffer.concat([chunk, Buffer.from('\r\n')]));
+            sendBuffer(chunk);
           },
         });
         process.nextTick(() => {

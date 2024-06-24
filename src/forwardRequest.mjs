@@ -81,6 +81,7 @@ export default async ({
 
   assert(Array.isArray(requestForwardOptions.headers) || _.isPlainObject(requestForwardOptions.headers));
 
+
   if (Object.hasOwnProperty.call(ctx.requestForward, 'onBody')) {
     requestForwardOptions.onBody = ctx.requestForward.onBody;
     if (requestForwardOptions.onBody) {

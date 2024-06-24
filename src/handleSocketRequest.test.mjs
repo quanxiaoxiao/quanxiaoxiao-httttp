@@ -12,6 +12,7 @@ import net from 'node:net';
 import assert from 'node:assert';
 import createError from 'http-errors';
 import _ from 'lodash';
+import request from '@quanxiaoxiao/http-request';
 import { waitFor } from '@quanxiaoxiao/utils';
 import { wrapStreamRead } from '@quanxiaoxiao/node-utils';
 import {
@@ -1240,6 +1241,26 @@ test('handleSocketRequest ctx.response.body with stream backpress', async () => 
   state.connector();
   server.close();
 });
+
+/*
+test('handleSocketRequest request forward', { only: true }, async () => {
+  const port = getPort();
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    ctx.request.body = new PassThrough();
+  });
+  const onHttpError = mock.fn(() => {});
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpRequestHeader,
+      onHttpError,
+    });
+  });
+  server.listen(port);
+  await waitFor(1000);
+  server.close();
+});
+*/
 
 /*
 test('handleSocketRequest ctx.onRequest with request body, bind at onHttpRequestHeader', async () => {

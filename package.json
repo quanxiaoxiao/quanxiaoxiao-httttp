@@ -22,8 +22,8 @@
     "node": ">= 20.0.0"
   },
   "dependencies": {
-    "@quanxiaoxiao/http-request": "^0.18.0",
-    "@quanxiaoxiao/http-utils": "^0.10.0",
+    "@quanxiaoxiao/http-request": "^0.20.0",
+    "@quanxiaoxiao/http-utils": "^0.13.0",
     "@quanxiaoxiao/node-utils": "^0.8.0",
     "@quanxiaoxiao/socket": "^0.7.0",
     "cheerio": "^1.0.0-rc.12",
