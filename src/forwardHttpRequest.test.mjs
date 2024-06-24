@@ -298,3 +298,42 @@ test('forwardRequest request body 3', async () => {
   assert.equal(ctx.response.body.toString(), 'ok');
   server.close();
 });
+
+test('forwardRequest request body 4', async () => {
+  const port = getPort();
+  const onRequestSocketData = mock.fn(() => {});
+  const onRequestSocketClose = mock.fn(() => {});
+  const server = net.createServer((socket) => {
+    socket.on('data', onRequestSocketData);
+    socket.on('close', onRequestSocketClose);
+  });
+  server.listen(port);
+  await waitFor(100);
+  const ctx = {};
+  const requestBodyStream = new PassThrough();
+  forwardHttpRequest({
+    ctx,
+    options: {
+      path: '/test',
+      headers: {
+        name: 'foo',
+        'content-length': 4,
+      },
+      port,
+      body: requestBodyStream,
+    },
+  });
+  await waitFor(100);
+  requestBodyStream.write('aa');
+  await waitFor(100);
+  requestBodyStream.write('bbbb');
+  await waitFor(1000);
+  assert.equal(onRequestSocketData.mock.calls.length, 2);
+  assert.equal(onRequestSocketClose.mock.calls.length, 1);
+  assert.equal(
+    onRequestSocketData.mock.calls[0].arguments[0].toString(),
+    'GET /test HTTP/1.1\r\nname: foo\r\nContent-Length: 4\r\n\r\n',
+  );
+  assert.equal(ctx.response.statusCode, 500);
+  server.close();
+});
