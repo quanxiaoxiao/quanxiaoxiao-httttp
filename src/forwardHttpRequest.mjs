@@ -13,9 +13,6 @@ export default ({
   onHeader,
   onEnd,
 }) => {
-  if (ctx.response && ctx.response.body) {
-    assert(ctx.response.body instanceof Readable);
-  }
   const hasRequestBody = Object.hasOwnProperty.call(options, 'body');
   if (hasRequestBody) {
     assert(options.body === null
@@ -30,6 +27,9 @@ export default ({
     };
   }
   assert(_.isPlainObject(ctx.response));
+  if (ctx.response.body) {
+    assert(ctx.response.body instanceof Readable);
+  }
   ctx.response.httpVersion = null;
   ctx.response.statusCode = null;
   ctx.response.statusText = null;
