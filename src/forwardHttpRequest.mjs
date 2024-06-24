@@ -1,5 +1,6 @@
 import { Readable } from 'node:stream';
 import assert from 'node:assert';
+import _ from 'lodash';
 import request, { NetConnectTimeoutError } from '@quanxiaoxiao/http-request';
 import getSocketConnection from './getSocketConnection.mjs';
 
@@ -8,6 +9,9 @@ export default ({
   options,
   ctx,
   onRequest,
+  onStartLine,
+  onHeader,
+  onEnd,
 }) => {
   if (ctx.response && ctx.response.body) {
     assert(ctx.response.body instanceof Readable);
@@ -22,14 +26,15 @@ export default ({
   }
   if (!ctx.response) {
     ctx.response = {
-      httpVersion: null,
-      statusCode: null,
-      statusText: null,
-      headers: {},
-      headersRaw: [],
       body: null,
     };
   }
+  assert(_.isPlainObject(ctx.response));
+  ctx.response.httpVersion = null;
+  ctx.response.statusCode = null;
+  ctx.response.statusText = null;
+  ctx.response.headers = {};
+  ctx.response.headersRaw = [];
   return request(
     {
       method: options.method,
@@ -43,18 +48,29 @@ export default ({
           await onRequest(requestOptions, state);
         }
       },
-      onStartLine: (state) => {
+      onStartLine: async (state) => {
         ctx.response.httpVersion = state.httpVersion;
         ctx.response.statusCode = state.statusCode;
         ctx.response.statusText = state.statusText;
+        if (onStartLine) {
+          await onStartLine(ctx, state);
+        }
       },
-      onHeader: (state) => {
+      onHeader: async (state) => {
         ctx.response.headers = state.headers;
         ctx.response.headersRaw = state.headersRaw;
+        if (onHeader) {
+          await onHeader(ctx, state);
+        }
       },
-      onEnd: (state) => {
+      onEnd: async (state) => {
         if (!ctx.response.body) {
           ctx.response.body = state.body;
+        } else {
+          ctx.response.body.end();
+        }
+        if (onEnd) {
+          await onEnd(ctx, state);
         }
       },
     },
@@ -68,6 +84,7 @@ export default ({
     .then(
       () => {},
       (error) => {
+        ctx.error = error;
         if (!signal || !signal.aborted) {
           if (error.state.timeOnConnect == null) {
             ctx.response.statusCode = 502;
@@ -77,7 +94,6 @@ export default ({
             ctx.response.statusCode = 500;
           }
         }
-        ctx.error = error;
       },
     )
 };

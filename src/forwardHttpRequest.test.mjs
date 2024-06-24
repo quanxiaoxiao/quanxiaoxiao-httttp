@@ -1,8 +1,14 @@
 import { mock, test } from 'node:test';
+import path from 'node:path';
+import fs from 'node:fs';
 import net from 'node:net';
 import { PassThrough } from 'node:stream';
 import assert from 'node:assert';
-import { encodeHttp } from '@quanxiaoxiao/http-utils';
+import _ from 'lodash';
+import {
+  encodeHttp,
+  decodeHttpRequest,
+} from '@quanxiaoxiao/http-utils';
 import { waitFor } from '@quanxiaoxiao/utils';
 import forwardHttpRequest from './forwardHttpRequest.mjs';
 
@@ -17,7 +23,7 @@ const _getPort = () => {
 
 const getPort = _getPort();
 
-test('forwardRequest request body invalid', () => {
+test('forwardHttpRequest request body invalid', () => {
   assert.throws(
     () => {
       forwardHttpRequest({
@@ -71,7 +77,7 @@ test('forwardRequest request body invalid', () => {
   );
 });
 
-test('forwardRequest unable connect server', async () => {
+test('forwardHttpRequest unable connect server', async () => {
   const ctx = {};
   forwardHttpRequest({
     ctx,
@@ -84,7 +90,7 @@ test('forwardRequest unable connect server', async () => {
   assert(ctx.error instanceof Error);
 });
 
-test('forwardRequest 1', async () => {
+test('forwardHttpRequest 1', async () => {
   const port = getPort();
   const onRequestSocketData = mock.fn(() => {});
   const onRequestSocketClose = mock.fn(() => {});
@@ -120,7 +126,7 @@ test('forwardRequest 1', async () => {
   server.close();
 });
 
-test('forwardRequest 2', async () => {
+test('forwardHttpRequest 2', async () => {
   const port = getPort();
   const onRequestSocketData = mock.fn(() => {});
   const onRequestSocketClose = mock.fn(() => {});
@@ -161,7 +167,7 @@ test('forwardRequest 2', async () => {
   server.close();
 });
 
-test('forwardRequest request body 1', async () => {
+test('forwardHttpRequest request body 1', async () => {
   const port = getPort();
   const onRequestSocketData = mock.fn(() => {});
   const onRequestSocketClose = mock.fn(() => {});
@@ -205,7 +211,7 @@ test('forwardRequest request body 1', async () => {
   server.close();
 });
 
-test('forwardRequest request body 2', async () => {
+test('forwardHttpRequest request body 2', async () => {
   const port = getPort();
   const onRequestSocketData = mock.fn(() => {});
   const onRequestSocketClose = mock.fn(() => {});
@@ -245,7 +251,7 @@ test('forwardRequest request body 2', async () => {
   server.close();
 });
 
-test('forwardRequest request body 3', async () => {
+test('forwardHttpRequest request body 3', async () => {
   const port = getPort();
   const onRequestSocketData = mock.fn(() => {});
   const onRequestSocketClose = mock.fn(() => {});
@@ -299,7 +305,7 @@ test('forwardRequest request body 3', async () => {
   server.close();
 });
 
-test('forwardRequest request body 4', async () => {
+test('forwardHttpRequest request body 4', async () => {
   const port = getPort();
   const onRequestSocketData = mock.fn(() => {});
   const onRequestSocketClose = mock.fn(() => {});
@@ -339,7 +345,7 @@ test('forwardRequest request body 4', async () => {
   server.close();
 });
 
-test('forwardRequest request body 5', async () => {
+test('forwardHttpRequest request body 5', async () => {
   const port = getPort();
   const onRequestSocketData = mock.fn(() => {});
   const onRequestSocketClose = mock.fn(() => {});
@@ -398,7 +404,7 @@ test('forwardRequest request body 5', async () => {
   server.close();
 });
 
-test('forwardRequest request body 6', async () => {
+test('forwardHttpRequest request body 6', async () => {
   const port = getPort();
   const onRequestSocketData = mock.fn(() => {});
   const server = net.createServer((socket) => {
@@ -429,5 +435,91 @@ test('forwardRequest request body 6', async () => {
   assert.equal(onRequestSocketData.mock.calls.length, 2);
   assert(ctx.error instanceof Error);
   assert.equal(ctx.response.statusCode, 500);
+  server.close();
+});
+
+test('forwardHttpRequest request body stream backpress', { only: true }, async () => {
+  const port = getPort();
+  const pathname = path.resolve(process.cwd(), `test_${Date.now()}_ccsdfww_66`);
+  const ws = fs.createWriteStream(pathname);
+  const server = net.createServer((socket) => {
+    ws.on('drain', () => {
+      if (socket.isPaused()) {
+        socket.resume();
+      }
+    });
+    const decode = decodeHttpRequest({
+      onBody: (chunk) => {
+        const ret = ws.write(chunk);
+        if (!ret) {
+          socket.pause();
+        }
+      },
+      onEnd: () => {
+        socket.write(encodeHttp({
+          statusCode: 200,
+          headers: {
+            name: 'foo',
+          },
+          body: 'aaaccc',
+        }));
+        ws.end();
+      },
+    });
+    socket.on('data', (chunk) => {
+      decode(chunk);
+    });
+  });
+  server.listen(port);
+  await waitFor(100);
+  const ctx = {};
+  const requestBodyStream = new PassThrough();
+  let isPaused = false;
+  let i = 0;
+  const count = 3000;
+  const content = 'aaaaabbbbbbbbcccccccddddd___adfw';
+  const walk = () => {
+    while (!isPaused && i < count) {
+      const s = `${_.times(800).map(() => content).join('')}:${i}`;
+      const ret = requestBodyStream.write(s);
+      if (ret === false) {
+        isPaused = true;
+      }
+      i++;
+    }
+    if (i >= count && !requestBodyStream.writableEnded) {
+      setTimeout(() => {
+        if (!requestBodyStream.writableEnded) {
+          requestBodyStream.end();
+        }
+      }, 500);
+    }
+  };
+  requestBodyStream.on('drain', () => {
+    isPaused = false;
+    walk();
+  });
+  forwardHttpRequest({
+    ctx,
+    onRequest: () => {
+      walk();
+    },
+    options: {
+      path: '/test',
+      headers: {
+        name: 'foo',
+      },
+      port,
+      body: requestBodyStream,
+    },
+  });
+  await waitFor(5000);
+  assert(ws.writableEnded);
+  assert.equal(ctx.response.statusCode, 200);
+  assert.equal(ctx.response.body.toString(), 'aaaccc');
+  assert.deepEqual(ctx.response.headers, { name: 'foo', 'content-length': 6 });
+  const buf = fs.readFileSync(pathname);
+  assert(new RegExp(`:${count - 1}$`).test(buf.toString()));
+  fs.unlinkSync(pathname);
   server.close();
 });
