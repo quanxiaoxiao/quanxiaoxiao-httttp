@@ -12,10 +12,8 @@ import {
   parseHttpPath,
   isHttpStream,
   hasHttpBodyContent,
+  DecodeHttpError,
 } from '@quanxiaoxiao/http-utils';
-import {
-  HttpParserError,
-} from '@quanxiaoxiao/http-request';
 import {
   wrapStreamWrite,
   wrapStreamRead,
@@ -126,7 +124,7 @@ export default ({
       if (ctx.response && ctx.response.body instanceof Readable) {
         assert(!Object.hasOwnProperty.call(ctx.response, 'data'));
         const encodeHttpResponse = encodeHttp({
-          statusCode: ctx.response.statusCode || 200,
+          statusCode: ctx.response.statusCode,
           headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
           body: new PassThrough(),
           onHeader: sendBuffer,
@@ -138,15 +136,13 @@ export default ({
               stream: ctx.response.body,
               onData: (chunk) => sendBuffer(encodeHttpResponse(chunk)),
               onEnd: () => {
-                const buf = encodeHttpResponse();
-                if (buf) {
-                  sendBuffer(buf);
-                }
+                sendBuffer(encodeHttpResponse());
                 if (!controller.signal.aborted) {
                   doResponseEnd();
                 }
               },
               onError: (error) => {
+                console.log(error);
                 console.warn(`response.body stream error \`${error.message}\``);
                 if (!controller.signal.aborted) {
                   state.connector();
@@ -324,7 +320,7 @@ export default ({
           if (!controller.signal.aborted) {
             if (state.ctx) {
               state.ctx.error = error;
-              if (error instanceof HttpParserError) {
+              if (error instanceof DecodeHttpError) {
                 error.statusCode = 400;
               }
               doResponseError(state.ctx);

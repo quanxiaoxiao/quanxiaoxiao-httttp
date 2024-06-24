@@ -22,7 +22,6 @@ import {
 } from '@quanxiaoxiao/http-utils';
 import {
   httpRequest,
-  HttpParserError,
   SocketCloseError,
 } from '@quanxiaoxiao/http-request';
 import { createConnector } from '@quanxiaoxiao/socket';
@@ -1040,7 +1039,7 @@ test('handleSocketRequest ctx.response.data null', async () => {
   server.close();
 });
 
-test('handleSocketRequest ctx.response.body with stream', async () => {
+test('handleSocketRequest ctx.response.body with stream 1', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
   const responseBodyStream = new PassThrough();
@@ -1091,6 +1090,101 @@ test('handleSocketRequest ctx.response.body with stream', async () => {
       encode(Buffer.from('bbb')),
       encode(),
     ]).toString(),
+  );
+  connector();
+  server.close();
+});
+
+test('handleSocketRequest ctx.response.body with stream 3', { only: true }, async () => {
+  const port = getPort();
+  const onHttpError = mock.fn(() => {});
+  const responseBodyStream = new PassThrough();
+  const onHttpResponse = mock.fn((ctx) => {
+    ctx.response = {
+      headers: {
+        'Content-Length': 4,
+      },
+      body: responseBodyStream,
+    };
+    setTimeout(() => {
+      responseBodyStream.write(Buffer.from('aaa'));
+    }, 20);
+    setTimeout(() => {
+      responseBodyStream.write(Buffer.from('bbb'));
+    }, 40);
+  });
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpResponse,
+      onHttpError,
+    });
+  });
+  server.listen(port);
+  const onData = mock.fn(() => {});
+  const onClose = mock.fn(() => {});
+  const onError = mock.fn(() => {});
+  const connector = createConnector(
+    {
+      onData,
+      onClose,
+      onError,
+    },
+    () => connect(port),
+  );
+  connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nContent-Length: 0\r\n\r\n'));
+  await waitFor(1000);
+  connector();
+  server.close();
+});
+
+test('handleSocketRequest ctx.response.body with stream 2', async () => {
+  const port = getPort();
+  const onHttpError = mock.fn(() => {});
+  const responseBodyStream = new PassThrough();
+  const onHttpResponse = mock.fn((ctx) => {
+    ctx.response = {
+      headers: {
+        'Content-Length': 6,
+      },
+      body: responseBodyStream,
+    };
+    setTimeout(() => {
+      responseBodyStream.write(Buffer.from('aaa'));
+    }, 20);
+    setTimeout(() => {
+      responseBodyStream.write(Buffer.from('bbb'));
+    }, 40);
+    setTimeout(() => {
+      responseBodyStream.end();
+    }, 100);
+  });
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpResponse,
+      onHttpError,
+    });
+  });
+  server.listen(port);
+  const onData = mock.fn(() => {});
+  const onClose = mock.fn(() => {});
+  const onError = mock.fn(() => {});
+  const connector = createConnector(
+    {
+      onData,
+      onClose,
+      onError,
+    },
+    () => connect(port),
+  );
+  connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nContent-Length: 0\r\n\r\n'));
+  await waitFor(1000);
+  assert.equal(onClose.mock.calls.length, 0);
+  assert.equal(onError.mock.calls.length, 0);
+  assert.equal(
+    Buffer.concat(onData.mock.calls.map((a) => a.arguments[0])).toString(),
+    'HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\naaabbb',
   );
   connector();
   server.close();
