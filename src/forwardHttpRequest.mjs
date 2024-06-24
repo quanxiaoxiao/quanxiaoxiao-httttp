@@ -15,6 +15,7 @@ export default ({
   const hasRequestBody = Object.hasOwnProperty.call(options, 'body');
   if (hasRequestBody) {
     assert(options.body === null
+      || options.body instanceof Readable
       || Buffer.isBuffer(options.body)
       || typeof options.body === 'string'
     );

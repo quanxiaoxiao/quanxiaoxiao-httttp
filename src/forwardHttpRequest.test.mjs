@@ -1,5 +1,6 @@
 import { mock, test } from 'node:test';
 import net from 'node:net';
+import { PassThrough } from 'node:stream';
 import assert from 'node:assert';
 import { encodeHttp } from '@quanxiaoxiao/http-utils';
 import { waitFor } from '@quanxiaoxiao/utils';
@@ -201,5 +202,99 @@ test('forwardRequest request body 1', async () => {
   );
   assert.equal(ctx.response.statusCode, 200);
   assert.equal(ctx.response.body.toString(), 'ccc');
+  server.close();
+});
+
+test('forwardRequest request body 2', async () => {
+  const port = getPort();
+  const onRequestSocketData = mock.fn(() => {});
+  const onRequestSocketClose = mock.fn(() => {});
+  const server = net.createServer((socket) => {
+    socket.on('data', onRequestSocketData);
+    socket.on('close', onRequestSocketClose);
+    setTimeout(() => {
+      socket.write(encodeHttp({
+        statusCode: 200,
+        body: 'ok',
+      }));
+    }, 100);
+  });
+  server.listen(port);
+  await waitFor(100);
+  const ctx = {};
+  forwardHttpRequest({
+    ctx,
+    options: {
+      path: '/test',
+      headers: {
+        name: 'foo',
+        'content-length': 8,
+      },
+      port,
+      body: 'aaa',
+    },
+  });
+  await waitFor(1000);
+  assert.equal(onRequestSocketData.mock.calls.length, 1);
+  assert.equal(onRequestSocketClose.mock.calls.length, 1);
+  assert.equal(
+    onRequestSocketData.mock.calls[0].arguments[0].toString(),
+    'GET /test HTTP/1.1\r\nname: foo\r\nContent-Length: 3\r\n\r\naaa',
+  );
+  assert.equal(ctx.response.statusCode, 200);
+  server.close();
+});
+
+test('forwardRequest request body 3', async () => {
+  const port = getPort();
+  const onRequestSocketData = mock.fn(() => {});
+  const onRequestSocketClose = mock.fn(() => {});
+  const server = net.createServer((socket) => {
+    socket.on('data', onRequestSocketData);
+    socket.on('close', onRequestSocketClose);
+    setTimeout(() => {
+      socket.write(encodeHttp({
+        statusCode: 200,
+        body: 'ok',
+      }));
+    }, 500);
+  });
+  server.listen(port);
+  await waitFor(100);
+  const ctx = {};
+  const requestBodyStream = new PassThrough();
+  forwardHttpRequest({
+    ctx,
+    options: {
+      path: '/test',
+      headers: {
+        name: 'foo',
+        'content-length': 6,
+      },
+      port,
+      body: requestBodyStream,
+    },
+  });
+  await waitFor(100);
+  requestBodyStream.write('aa');
+  await waitFor(100);
+  requestBodyStream.write('bbbb');
+  await waitFor(1000);
+  assert.equal(onRequestSocketData.mock.calls.length, 3);
+  assert.equal(onRequestSocketClose.mock.calls.length, 1);
+  assert.equal(
+    onRequestSocketData.mock.calls[0].arguments[0].toString(),
+    'GET /test HTTP/1.1\r\nname: foo\r\nContent-Length: 6\r\n\r\n',
+  );
+  assert.equal(
+    onRequestSocketData.mock.calls[1].arguments[0].toString(),
+    'aa',
+  );
+  assert.equal(
+    onRequestSocketData.mock.calls[2].arguments[0].toString(),
+    'bbbb',
+  );
+  assert.equal(ctx.response.statusCode, 200);
+  assert.equal(ctx.response.body.toString(), 'ok');
   server.close();
 });
