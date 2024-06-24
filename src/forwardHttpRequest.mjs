@@ -1,35 +1,39 @@
+import request from '@quanxiaoxiao/http-request';
 import getSocketConnection from './getSocketConnection.mjs';
 
 export default ({
-    request,
-    signal,
-    options,
+  signal,
+  options,
+  ctx,
+  onRequest,
 }) => {
-  const state = {
-    timeOnConnect: null,
-    timeOnRequestSend: null,
-    timeOnRequestEnd: null,
-    timeOnResponse: null,
-    timeOnResponseStartLine: null,
-    timeOnResponseHeader: null,
-    timeOnResponseBody: null,
-    timeOnResponseEnd: null,
-  };
-
-  const requestForwardOptions = {
-    method: options.method,
-    path: options.path,
-    headers: options.headers,
-    signal,
-  };
-
-  request(
-    requestForwardOptions,
+  return request(
+    {
+      method: options.method,
+      path: options.path,
+      headers: options.headers,
+      signal,
+      onRequest: async (requestOptions, state) => {
+        if (onRequest) {
+          await onRequest(requestOptions, state);
+        }
+        if (!signal || !signal.aborted) {
+          ctx.response = {
+            httpVersion: null,
+            statusCode: null,
+            statusText: null,
+            headers: {},
+            headersRaw: [],
+            body: null,
+          };
+        }
+      },
+    },
     () => getSocketConnection({
       hostname: options.hostname,
       servername: options.servername,
       port: options.port,
       protocol: options.protocol || 'http:',
     }),
-  );
+  )
 };
