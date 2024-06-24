@@ -1,7 +1,6 @@
 import { mock, test } from 'node:test';
 import net from 'node:net';
 import assert from 'node:assert';
-import { DoAbortError } from '@quanxiaoxiao/http-request';
 import { encodeHttp } from '@quanxiaoxiao/http-utils';
 import { waitFor } from '@quanxiaoxiao/utils';
 import forwardHttpRequest from './forwardHttpRequest.mjs';
@@ -17,11 +16,76 @@ const _getPort = () => {
 
 const getPort = _getPort();
 
+test('forwardRequest request body invalid', () => {
+  assert.throws(
+    () => {
+      forwardHttpRequest({
+        ctx: {},
+        options: {
+          body: 33,
+          port: 9999,
+        },
+      });
+    },
+    (error) => error instanceof assert.AssertionError,
+  );
+
+  assert.throws(
+    () => {
+      forwardHttpRequest({
+        ctx: {},
+        options: {
+          body: {},
+          port: 9999,
+        },
+      });
+    },
+    (error) => error instanceof assert.AssertionError,
+  );
+
+  assert.throws(
+    () => {
+      forwardHttpRequest({
+        ctx: {},
+        options: {
+          body: false,
+          port: 9999,
+        },
+      });
+    },
+    (error) => error instanceof assert.AssertionError,
+  );
+
+  assert.throws(
+    () => {
+      forwardHttpRequest({
+        ctx: {},
+        options: {
+          body: [],
+          port: 9999,
+        },
+      });
+    },
+    (error) => error instanceof assert.AssertionError,
+  );
+});
+
+test('forwardRequest unable connect server', async () => {
+  const ctx = {};
+  forwardHttpRequest({
+    ctx,
+    options: {
+      port: 9999,
+    },
+  });
+  await waitFor(1000);
+  assert.equal(ctx.response.statusCode, 502);
+  assert(ctx.error instanceof Error);
+});
+
 test('forwardRequest 1', async () => {
   const port = getPort();
   const onRequestSocketData = mock.fn(() => {});
-  const onFail = mock.fn(() => {});
-  const onSuccess = mock.fn(() => {});
   const onRequestSocketClose = mock.fn(() => {});
   const onConnect = mock.fn((socket) => {
     socket.on('data', onRequestSocketData);
@@ -38,11 +102,7 @@ test('forwardRequest 1', async () => {
     options: {
       port,
     },
-  })
-    .then(
-      onSuccess,
-      onFail,
-    );
+  });
   await waitFor(1000);
   assert.equal(onConnect.mock.calls.length, 1);
   assert.equal(onRequestSocketData.mock.calls.length, 1);
@@ -52,32 +112,16 @@ test('forwardRequest 1', async () => {
     'GET / HTTP/1.1\r\nContent-Length: 0\r\n\r\n',
   );
   await waitFor(500);
-  assert.equal(onFail.mock.calls.length, 0);
   controller.abort();
   await waitFor(100);
-  assert.equal(onFail.mock.calls.length, 1);
-  assert.equal(onSuccess.mock.calls.length, 0);
   assert.equal(onRequestSocketClose.mock.calls.length, 1);
-  assert(onFail.mock.calls[0].arguments[0] instanceof DoAbortError);
-  assert.deepEqual(
-    ctx.response,
-    {
-      httpVersion: null,
-      statusCode: null,
-      statusText: null,
-      headers: {},
-      headersRaw: [],
-      body: null,
-    },
-  );
+  assert.equal(ctx.response.statusCode, null);
   server.close();
 });
 
 test('forwardRequest 2', async () => {
   const port = getPort();
   const onRequestSocketData = mock.fn(() => {});
-  const onFail = mock.fn(() => {});
-  const onSuccess = mock.fn(() => {});
   const onRequestSocketClose = mock.fn(() => {});
   const onConnect = mock.fn((socket) => {
     socket.on('data', onRequestSocketData);
@@ -103,15 +147,9 @@ test('forwardRequest 2', async () => {
       port,
       onRequest,
     },
-  })
-    .then(
-      onSuccess,
-      onFail,
-    );
+  });
   await waitFor(1000);
   assert.equal(onRequestSocketClose.mock.calls.length, 1);
-  assert.equal(onSuccess.mock.calls.length, 1);
-  assert.equal(onFail.mock.calls.length, 0);
   assert.equal(ctx.response.statusCode, 200);
   assert.deepEqual(ctx.response.headers, {
     name: 'quan',
