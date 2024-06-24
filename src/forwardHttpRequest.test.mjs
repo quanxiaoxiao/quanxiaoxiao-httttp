@@ -1,12 +1,8 @@
 import { mock, test } from 'node:test';
-import { PassThrough } from 'node:stream';
-import process from 'node:process';
-import fs from 'node:fs';
-import path from 'node:path';
 import net from 'node:net';
 import assert from 'node:assert';
-import _ from 'lodash';
 import { DoAbortError } from '@quanxiaoxiao/http-request';
+import { encodeHttp } from '@quanxiaoxiao/http-utils';
 import { waitFor } from '@quanxiaoxiao/utils';
 import forwardHttpRequest from './forwardHttpRequest.mjs';
 
@@ -34,7 +30,6 @@ test('forwardRequest 1', async () => {
   const server = net.createServer(onConnect);
   server.listen(port);
   const controller = new AbortController();
-  const onRequest = mock.fn(() => {});
   await waitFor(100);
   const ctx = {};
   forwardHttpRequest({
@@ -42,7 +37,6 @@ test('forwardRequest 1', async () => {
     ctx,
     options: {
       port,
-      onRequest,
     },
   })
     .then(
@@ -76,5 +70,54 @@ test('forwardRequest 1', async () => {
       body: null,
     },
   );
+  server.close();
+});
+
+test('forwardRequest 2', async () => {
+  const port = getPort();
+  const onRequestSocketData = mock.fn(() => {});
+  const onFail = mock.fn(() => {});
+  const onSuccess = mock.fn(() => {});
+  const onRequestSocketClose = mock.fn(() => {});
+  const onConnect = mock.fn((socket) => {
+    socket.on('data', onRequestSocketData);
+    socket.on('close', onRequestSocketClose);
+    setTimeout(() => {
+      socket.write(encodeHttp({
+        statusCode: 200,
+        headers: {
+          name: 'quan',
+        },
+        body: 'ok',
+      }));
+    }, 100);
+  });
+  const server = net.createServer(onConnect);
+  server.listen(port);
+  const onRequest = mock.fn(() => {});
+  await waitFor(100);
+  const ctx = {};
+  forwardHttpRequest({
+    ctx,
+    options: {
+      port,
+      onRequest,
+    },
+  })
+    .then(
+      onSuccess,
+      onFail,
+    );
+  await waitFor(1000);
+  assert.equal(onRequestSocketClose.mock.calls.length, 1);
+  assert.equal(onSuccess.mock.calls.length, 1);
+  assert.equal(onFail.mock.calls.length, 0);
+  assert.equal(ctx.response.statusCode, 200);
+  assert.deepEqual(ctx.response.headers, {
+    name: 'quan',
+    'content-length': 2,
+  });
+  assert.deepEqual(ctx.response.headersRaw, ['name', 'quan', 'Content-Length', '2']);
+  assert.equal(ctx.response.body.toString(), 'ok');
   server.close();
 });
