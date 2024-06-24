@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { PassThrough } from 'node:stream';
 import assert from 'node:assert';
 import zlib from 'node:zlib';
 import { STATUS_CODES } from 'node:http';
@@ -7,6 +8,18 @@ import generateResponse from './generateResponse.mjs';
 test('generateResponse', () => {
   assert.throws(() => {
     const ctx = {};
+    generateResponse(ctx);
+  });
+  assert.throws(() => {
+    const ctx = {
+      body: new PassThrough(),
+    };
+    generateResponse(ctx);
+  });
+  assert.throws(() => {
+    const ctx = {
+      body: 22,
+    };
     generateResponse(ctx);
   });
   const ctx = {

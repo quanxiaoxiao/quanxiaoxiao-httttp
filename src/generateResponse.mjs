@@ -1,4 +1,6 @@
 import { STATUS_CODES } from 'node:http';
+import { Buffer } from 'node:buffer';
+import { Readable } from 'node:stream';
 import assert from 'node:assert';
 import zlib from 'node:zlib';
 import createError from 'http-errors';
@@ -10,13 +12,14 @@ import {
 
 export default (ctx) => {
   if (!ctx.response) {
-    throw createError(503, '`ctx.response` is unset');
+    throw createError(503, '`ctx.response` is empty');
   }
   const response = {
-    statusCode: ctx.response.statusCode || 200,
+    statusCode: ctx.response.statusCode ?? 200,
     headers: ctx.response.headers || {},
-    body: ctx.response.body,
+    body: ctx.response.body ?? null,
   };
+  assert(!(ctx.response.body instanceof Readable));
   if (STATUS_CODES[response.statusCode]) {
     response.statusText = STATUS_CODES[response.statusCode];
   }
@@ -58,5 +61,8 @@ export default (ctx) => {
     }
   }
   assert(response.statusCode >= 0 && response.statusCode <= 999);
+  if (response.body != null) {
+    assert(Buffer.isBuffer(response.body) || typeof response.body === 'string');
+  }
   return response;
 };

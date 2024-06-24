@@ -51,11 +51,11 @@ export default ({
   };
 
   const sendBuffer = (buf) => {
-    const len = buf.length;
-    if (!controller.signal.aborted && len > 0) {
+    const size = buf.length;
+    if (!controller.signal.aborted && size > 0) {
       try {
         const ret = state.connector.write(buf);
-        state.bytesOutgoing += len;
+        state.bytesOutgoing += size;
         return ret;
       } catch (error) { // eslint-disable-line
         if (!controller.signal.aborted) {
@@ -129,9 +129,7 @@ export default ({
           statusCode: ctx.response.statusCode || 200,
           headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
           body: new PassThrough(),
-          onHeader: (chunk) => {
-            sendBuffer(chunk);
-          },
+          onHeader: sendBuffer,
         });
         process.nextTick(() => {
           try {
@@ -140,7 +138,10 @@ export default ({
               stream: ctx.response.body,
               onData: (chunk) => sendBuffer(encodeHttpResponse(chunk)),
               onEnd: () => {
-                sendBuffer(encodeHttpResponse());
+                const buf = encodeHttpResponse();
+                if (buf) {
+                  sendBuffer(buf);
+                }
                 if (!controller.signal.aborted) {
                   doResponseEnd();
                 }
