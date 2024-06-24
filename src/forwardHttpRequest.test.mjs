@@ -335,5 +335,99 @@ test('forwardRequest request body 4', async () => {
     'GET /test HTTP/1.1\r\nname: foo\r\nContent-Length: 4\r\n\r\n',
   );
   assert.equal(ctx.response.statusCode, 500);
+  assert(ctx.error instanceof Error);
+  server.close();
+});
+
+test('forwardRequest request body 5', async () => {
+  const port = getPort();
+  const onRequestSocketData = mock.fn(() => {});
+  const onRequestSocketClose = mock.fn(() => {});
+  const server = net.createServer((socket) => {
+    socket.on('data', onRequestSocketData);
+    socket.on('close', onRequestSocketClose);
+    setTimeout(() => {
+      socket.write(encodeHttp({
+        statusCode: 200,
+        body: 'ok',
+      }));
+    }, 500);
+  });
+  server.listen(port);
+  await waitFor(100);
+  const ctx = {};
+  const requestBodyStream = new PassThrough();
+  forwardHttpRequest({
+    ctx,
+    options: {
+      path: '/test',
+      headers: {
+        name: 'foo',
+      },
+      port,
+      body: requestBodyStream,
+    },
+  });
+  await waitFor(100);
+  requestBodyStream.write('aa');
+  await waitFor(100);
+  requestBodyStream.write('bbbb');
+  await waitFor(100);
+  requestBodyStream.end();
+  await waitFor(1000);
+  assert.equal(onRequestSocketData.mock.calls.length, 4);
+  assert.equal(onRequestSocketClose.mock.calls.length, 1);
+  assert.equal(
+    onRequestSocketData.mock.calls[0].arguments[0].toString(),
+    'GET /test HTTP/1.1\r\nname: foo\r\nTransfer-Encoding: chunked\r\n\r\n',
+  );
+  assert.equal(
+    onRequestSocketData.mock.calls[1].arguments[0].toString(),
+    '2\r\naa\r\n',
+  );
+  assert.equal(
+    onRequestSocketData.mock.calls[2].arguments[0].toString(),
+    '4\r\nbbbb\r\n',
+  );
+  assert.equal(
+    onRequestSocketData.mock.calls[3].arguments[0].toString(),
+    '0\r\n\r\n',
+  );
+  assert.equal(ctx.response.statusCode, 200);
+  assert.equal(ctx.response.body.toString(), 'ok');
+  server.close();
+});
+
+test('forwardRequest request body 6', async () => {
+  const port = getPort();
+  const onRequestSocketData = mock.fn(() => {});
+  const server = net.createServer((socket) => {
+    socket.on('data', onRequestSocketData);
+    setTimeout(() => {
+      socket.destroy();
+    }, 200);
+  });
+  server.listen(port);
+  await waitFor(100);
+  const ctx = {};
+  const requestBodyStream = new PassThrough();
+  forwardHttpRequest({
+    ctx,
+    options: {
+      path: '/test',
+      headers: {
+        name: 'foo',
+      },
+      port,
+      body: requestBodyStream,
+    },
+  });
+  await waitFor(100);
+  requestBodyStream.write('aa');
+  await waitFor(1000);
+  assert(requestBodyStream.destroyed);
+  assert.equal(onRequestSocketData.mock.calls.length, 2);
+  assert(ctx.error instanceof Error);
+  assert.equal(ctx.response.statusCode, 500);
   server.close();
 });
