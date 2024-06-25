@@ -2,10 +2,10 @@ import handleSocketRequest from './handleSocketRequest.mjs';
 import renderToHtml from './renderToHtml.mjs';
 import parseHtml from './parseHtml.mjs';
 import generateHtmlTag from './generateHtmlTag.mjs';
-
-export default handleSocketRequest;
+import forwardHttpRequest from './forwardHttpRequest.mjs';
 
 export {
+  forwardHttpRequest,
   handleSocketRequest,
   parseHtml,
   renderToHtml,
