@@ -256,52 +256,6 @@ test('handleSocketRequest request.body stream 1', async () => {
   server.close();
 });
 
-test('handleSocketRequest request.body stream disable handle', async () => {
-  const port = getPort();
-  const onHttpRequestHeader = mock.fn((ctx) => {
-    assert.equal(ctx.request.headers.name, 'quan');
-  });
-  const onHttpRequestEnd = mock.fn(() => {});
-  const onHttpError = mock.fn((ctx) => {
-    assert.equal(ctx.response.statusCode, 400);
-  });
-  const onHttpResponse = mock.fn(() => {});
-  const server = net.createServer((socket) => {
-    handleSocketRequest({
-      socket,
-      onHttpRequestHeader,
-      onHttpRequestEnd,
-      onHttpError,
-      onHttpResponse,
-    });
-  });
-  server.listen(port);
-  await waitFor(100);
-  const onData = mock.fn(() => {});
-  const onClose = mock.fn(() => {});
-  const onError = mock.fn(() => {});
-  const connector = createConnector(
-    {
-      onData,
-      onClose,
-      onError,
-    },
-    () => connect(port),
-  );
-  await waitFor(100);
-  connector.write(Buffer.from('POST /aaa HTTP/1.1\r\nName: quan\r\n\r\naaa 88abb'));
-  await waitFor(1000);
-  assert.equal(onClose.mock.calls.length, 1);
-  assert.equal(onError.mock.calls.length, 0);
-  assert.equal(onHttpRequestEnd.mock.calls.length, 0);
-  assert.equal(onHttpError.mock.calls.length, 1);
-  assert.equal(onHttpRequestHeader.mock.calls.length, 1);
-  assert.equal(onHttpResponse.mock.calls.length, 0);
-  assert(/^HTTP\/1.1 400/.test(onData.mock.calls[0].arguments[0]));
-  server.close();
-  connector();
-});
-
 test('handleSocketRequest request.body set invalid', async () => {
   const port = getPort();
   const onHttpRequestHeader = mock.fn((ctx) => {

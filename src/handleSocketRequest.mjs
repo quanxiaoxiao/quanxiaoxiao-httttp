@@ -10,7 +10,6 @@ import {
   decodeHttpRequest,
   encodeHttp,
   parseHttpPath,
-  isHttpStream,
   hasHttpBodyContent,
   DecodeHttpError,
 } from '@quanxiaoxiao/http-utils';
@@ -195,9 +194,6 @@ export default ({
         if (onHttpRequestHeader) {
           await onHttpRequestHeader(ctx);
           assert(!controller.signal.aborted);
-        }
-        if (isHttpStream(ctx.request.headers)) {
-          throw createError(400);
         }
         if (hasHttpBodyContent(ctx.request.headers)) {
           if (ctx.request.body == null) {
