@@ -88,9 +88,12 @@ export default ({
         if (!signal || !signal.aborted) {
           if (error.state.timeOnConnect == null) {
             ctx.response.statusCode = 502;
+            ctx.error.statusCode = 502;
           } else if (error instanceof NetConnectTimeoutError) {
             ctx.response.statusCode = 504;
+            ctx.error.statusCode = 504;
           } else {
+            ctx.error.statusCode = 500;
             ctx.response.statusCode = 500;
           }
         }
