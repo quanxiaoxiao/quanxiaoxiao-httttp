@@ -66,8 +66,6 @@ export default ({
       onEnd: async (state) => {
         if (!ctx.response.body) {
           ctx.response.body = state.body;
-        } else {
-          ctx.response.body.end();
         }
         if (onEnd) {
           await onEnd(ctx, state);

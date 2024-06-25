@@ -438,7 +438,7 @@ test('forwardHttpRequest request body 6', async () => {
   server.close();
 });
 
-test('forwardHttpRequest request body stream backpress', { only: true }, async () => {
+test('forwardHttpRequest request body stream backpress', async () => {
   const port = getPort();
   const pathname = path.resolve(process.cwd(), `test_${Date.now()}_ccsdfww_66`);
   const ws = fs.createWriteStream(pathname);
@@ -518,6 +518,120 @@ test('forwardHttpRequest request body stream backpress', { only: true }, async (
   assert.equal(ctx.response.statusCode, 200);
   assert.equal(ctx.response.body.toString(), 'aaaccc');
   assert.deepEqual(ctx.response.headers, { name: 'foo', 'content-length': 6 });
+  const buf = fs.readFileSync(pathname);
+  assert(new RegExp(`:${count - 1}$`).test(buf.toString()));
+  fs.unlinkSync(pathname);
+  server.close();
+});
+
+test('forwardHttpRequest response body stream', async () => {
+  const port = getPort();
+  const onRequestSocketData = mock.fn(() => {});
+  const server = net.createServer((socket) => {
+    socket.on('data', onRequestSocketData);
+    const encode = encodeHttp({
+      headers: {
+        name: 'quan',
+        'content-length': 6,
+      },
+    });
+    setTimeout(() => {
+      socket.write(encode('aa'));
+    }, 100);
+    setTimeout(() => {
+      socket.write(encode('ccdd'));
+    }, 150);
+  });
+  server.listen(port);
+  await waitFor(100);
+  const handleDataOnResponseBodyStream = mock.fn(() => {});
+  const responseBodyStream = new PassThrough();
+  responseBodyStream.on('data', handleDataOnResponseBodyStream);
+  const ctx = {
+    response: {
+      body: responseBodyStream,
+    },
+  };
+  forwardHttpRequest({
+    ctx,
+    options: {
+      path: '/test',
+      body: null,
+      port,
+    },
+  });
+  await waitFor(1000);
+  assert(responseBodyStream.writableEnded);
+  assert.equal(handleDataOnResponseBodyStream.mock.calls.length, 2);
+  assert.equal(handleDataOnResponseBodyStream.mock.calls[0].arguments[0].toString(), 'aa');
+  assert.equal(handleDataOnResponseBodyStream.mock.calls[1].arguments[0].toString(), 'ccdd');
+  server.close();
+});
+
+test('forwardHttpRequest response body stream backpress', { only: true }, async () => {
+  let isPaused = false;
+  let i = 0;
+  const count = 3000;
+  const content = 'aaaaabbbbbbbbcccccccddddd___adfw';
+  const port = getPort();
+  const pathname = path.resolve(process.cwd(), `test_${Date.now()}_sasdfws_99`);
+  const ws = fs.createWriteStream(pathname);
+  let isEnd = false;
+  const server = net.createServer((socket) => {
+    socket.on('data', () => {});
+    const encode = encodeHttp({
+      headers: {
+        server: 'quan',
+      },
+    });
+    const walk = () => {
+      while (!isPaused && i < count) {
+        const s = `${_.times(800).map(() => content).join('')}:${i}`;
+        const ret = socket.write(encode(s));
+        if (ret === false) {
+          isPaused = true;
+        }
+        i++;
+      }
+      if (i >= count && !isEnd) {
+        setTimeout(() => {
+          if (!isEnd) {
+            isEnd = true;
+            socket.write(encode());
+          }
+        }, 500);
+      }
+    };
+    socket.on('drain', () => {
+      isPaused = false;
+      walk();
+    });
+    setTimeout(() => {
+      walk();
+    }, 100);
+  });
+  server.listen(port);
+  await waitFor(100);
+  const responseBodyStream = new PassThrough();
+  responseBodyStream.pipe(ws);
+  const ctx = {
+    response: {
+      body: responseBodyStream,
+    },
+  };
+  forwardHttpRequest({
+    ctx,
+    options: {
+      path: '/test',
+      body: null,
+      port,
+    },
+  });
+  await waitFor(5000);
+  assert.equal(ctx.response.statusCode, 200);
+  assert(responseBodyStream.writableEnded);
+  assert(ws.writableEnded);
+  assert.deepEqual(ctx.response.headers, { server: 'quan', 'transfer-encoding': 'chunked' });
   const buf = fs.readFileSync(pathname);
   assert(new RegExp(`:${count - 1}$`).test(buf.toString()));
   fs.unlinkSync(pathname);
