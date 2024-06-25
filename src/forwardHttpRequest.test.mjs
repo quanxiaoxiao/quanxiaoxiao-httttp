@@ -568,7 +568,7 @@ test('forwardHttpRequest response body stream', async () => {
   server.close();
 });
 
-test('forwardHttpRequest response body stream backpress', { only: true }, async () => {
+test('forwardHttpRequest response body stream backpress', async () => {
   let isPaused = false;
   let i = 0;
   const count = 3000;
