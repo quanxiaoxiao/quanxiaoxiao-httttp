@@ -1,8 +1,10 @@
 import { Readable } from 'node:stream';
 import assert from 'node:assert';
 import _ from 'lodash';
-import request, { NetConnectTimeoutError } from '@quanxiaoxiao/http-request';
-import getSocketConnection from './getSocketConnection.mjs';
+import request, {
+  NetConnectTimeoutError,
+  getSocketConnect,
+} from '@quanxiaoxiao/http-request';
 
 export default ({
   signal,
@@ -72,7 +74,7 @@ export default ({
         }
       },
     },
-    () => getSocketConnection({
+    () => getSocketConnect({
       hostname: options.hostname,
       servername: options.servername,
       port: options.port,

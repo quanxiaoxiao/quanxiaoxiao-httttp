@@ -5,7 +5,7 @@ import {
   encodeHttp,
 } from '@quanxiaoxiao/http-utils';
 import { pipeForward } from '@quanxiaoxiao/socket';
-import getSocketConnection from './getSocketConnection.mjs';
+import { getSocketConnect } from '@quanxiaoxiao/http-request';
 import attachResponseError from './attachResponseError.mjs';
 
 export default async ({
@@ -86,7 +86,7 @@ export default async ({
     },
   });
 
-  const socketDest = getSocketConnection({
+  const socketDest = getSocketConnect({
     hostname: ctx.requestForward.hostname,
     port: ctx.requestForward.port,
     servername: ctx.requestForward.servername,

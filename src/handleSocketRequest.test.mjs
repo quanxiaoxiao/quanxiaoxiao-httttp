@@ -21,7 +21,6 @@ import {
   decodeHttpResponse,
 } from '@quanxiaoxiao/http-utils';
 import {
-  httpRequest,
   SocketCloseError,
 } from '@quanxiaoxiao/http-request';
 import { createConnector } from '@quanxiaoxiao/socket';
