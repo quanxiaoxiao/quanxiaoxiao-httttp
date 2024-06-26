@@ -1,6 +1,6 @@
 {
   "name": "@quanxiaoxiao/httttp",
-  "version": "0.31.0",
+  "version": "0.32.0",
   "type": "module",
   "scripts": {
     "test": "NODE_ENV=test node --test"
@@ -22,8 +22,8 @@
     "node": ">= 20.0.0"
   },
   "dependencies": {
-    "@quanxiaoxiao/http-request": "^0.29.0",
-    "@quanxiaoxiao/http-utils": "^0.17.0",
+    "@quanxiaoxiao/http-request": "^0.30.0",
+    "@quanxiaoxiao/http-utils": "^0.18.0",
     "@quanxiaoxiao/node-utils": "^0.9.0",
     "@quanxiaoxiao/socket": "^0.7.0",
     "cheerio": "^1.0.0-rc.12",

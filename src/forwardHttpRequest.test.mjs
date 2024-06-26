@@ -716,3 +716,41 @@ test('forwardHttpRequest response body stream backpress', async () => {
   fs.unlinkSync(pathname);
   server.close();
 });
+
+test('forwardHttpRequest response body stream 500', async () => {
+  const port = getPort();
+  const handleSocketClose = mock.fn(() => {});
+  const server = net.createServer((socket) => {
+    socket.on('data', () => {});
+    setTimeout(() => {
+      socket.write('HTTP/1.1 500\r\nServer: quan\r\n\r\n');
+    }, 100);
+    socket.on('close', handleSocketClose);
+  });
+  server.listen(port);
+  await waitFor(100);
+  const handleCloseOnResponseBodyStream = mock.fn(() => {});
+  const handleDataOnResponseBodyStream = mock.fn(() => {});
+  const responseBodyStream = new PassThrough();
+  responseBodyStream.on('close', handleCloseOnResponseBodyStream);
+  responseBodyStream.on('data', handleDataOnResponseBodyStream);
+  const ctx = {
+    response: {
+      body: responseBodyStream,
+    },
+  };
+  const ret = await forwardHttpRequest({
+    ctx,
+    options: {
+      path: '/test',
+      body: null,
+      port,
+    },
+  });
+  await waitFor(100);
+  assert(responseBodyStream.destroyed);
+  assert.deepEqual(ret.headers, { server: 'quan', 'content-length': 0 });
+  assert.equal(ret.body, null);
+  assert.equal(handleSocketClose.mock.calls.length, 1);
+  server.close();
+});

@@ -97,8 +97,12 @@ export default ({
             await onHttpResponseHeader(ctx);
           }
           if (ctx.response.body) {
-            state.complete = true;
-            resolve(result);
+            if (result.statusCode === 200) {
+              state.complete = true;
+              resolve(result);
+            } else {
+              ctx.response.body = null;
+            }
           }
         },
         onEnd: async (result) => {
