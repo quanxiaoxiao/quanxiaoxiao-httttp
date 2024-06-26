@@ -11,9 +11,9 @@ export default ({
   options,
   ctx,
   onRequest,
-  onStartLine,
-  onHeader,
-  onEnd,
+  onHttpResponseStartLine,
+  onHttpResponseHeader,
+  onHttpResponseEnd,
 }) => {
   const hasRequestBody = Object.hasOwnProperty.call(options, 'body');
   if (hasRequestBody) {
@@ -32,71 +32,118 @@ export default ({
   if (ctx.response.body) {
     assert(ctx.response.body instanceof Readable);
   }
+
+  const state = {
+    complete: false,
+  };
+
   ctx.response.httpVersion = null;
   ctx.response.statusCode = null;
   ctx.response.statusText = null;
   ctx.response.headers = {};
   ctx.response.headersRaw = [];
-  return request(
-    {
-      method: options.method,
-      path: options.path,
-      headers: options.headers,
-      ...hasRequestBody ? { body: options.body } : {},
-      signal,
-      onBody: ctx.response && ctx.response.body ? ctx.response.body : null,
-      onRequest: async (requestOptions, state) => {
-        if (onRequest) {
-          await onRequest(ctx, state);
-        }
-      },
-      onStartLine: async (state) => {
-        ctx.response.httpVersion = state.httpVersion;
-        ctx.response.statusCode = state.statusCode;
-        ctx.response.statusText = state.statusText;
-        if (onStartLine) {
-          await onStartLine(ctx, state);
-        }
-      },
-      onHeader: async (state) => {
-        ctx.response.headers = state.headers;
-        ctx.response.headersRaw = state.headersRaw;
-        if (onHeader) {
-          await onHeader(ctx, state);
-        }
-      },
-      onEnd: async (state) => {
-        if (!ctx.response.body) {
-          ctx.response.body = state.body;
-        }
-        if (onEnd) {
-          await onEnd(ctx, state);
-        }
-      },
-    },
-    () => getSocketConnect({
-      hostname: options.hostname,
-      servername: options.servername,
-      port: options.port,
-      protocol: options.protocol || 'http:',
-    }),
-  )
-    .then(
-      () => {},
-      (error) => {
-        ctx.error = error;
-        if (!signal || !signal.aborted) {
-          if (error.state.timeOnConnect == null) {
-            ctx.response.statusCode = 502;
-            ctx.error.statusCode = 502;
-          } else if (error instanceof NetConnectTimeoutError) {
-            ctx.response.statusCode = 504;
-            ctx.error.statusCode = 504;
-          } else {
-            ctx.error.statusCode = 500;
-            ctx.response.statusCode = 500;
+
+  ctx.requestForward = {
+    bytesIncoming: 0,
+    bytesOutgoing: 0,
+    bytesRequestBody: 0,
+    bytesResponseBody: 0,
+    timeOnConnect: null,
+    timeOnRequestSend: null,
+    timeOnRequestEnd: null,
+    timeOnResponse: null,
+    timeOnResponseStartLine: null,
+    timeOnResponseHeader: null,
+    timeOnResponseBody: null,
+    timeOnResponseEnd: null
+  };
+
+  return new Promise((resolve, reject) => {
+    request(
+      {
+        method: options.method || 'GET',
+        path: options.path || '/',
+        headers: options.headers || {},
+        ...hasRequestBody ? { body: options.body } : {},
+        signal,
+        onBody: ctx.response && ctx.response.body ? ctx.response.body : null,
+        onRequest: async (requestOptions, result) => {
+          ctx.requestForward.timeOnConnect = result.timeOnConnect;
+          if (onRequest) {
+            await onRequest(ctx);
           }
-        }
+        },
+        onStartLine: async (result) => {
+          ctx.requestForward.timeOnRequestSend = result.timeOnRequestSend;
+          ctx.requestForward.timeOnRequestEnd = result.timeOnRequestEnd;
+          ctx.requestForward.timeOnResponse = result.timeOnResponse;
+          ctx.requestForward.timeOnResponseStartLine = result.timeOnResponseStartLine;
+          ctx.response.httpVersion = result.httpVersion;
+          ctx.response.statusCode = result.statusCode;
+          ctx.response.statusText = result.statusText;
+          ctx.requestForward.bytesOutgoing = result.bytesOutgoing;
+          ctx.requestForward.bytesIncoming = result.bytesIncoming;
+          ctx.requestForward.bytesRequestBody = result.bytesRequestBody;
+          if (onHttpResponseStartLine) {
+            await onHttpResponseStartLine(ctx);
+          }
+        },
+        onHeader: async (result) => {
+          ctx.response.headers = result.headers;
+          ctx.response.headersRaw = result.headersRaw;
+          ctx.requestForward.timeOnResponseHeader = result.timeOnResponseHeader;
+          ctx.requestForward.bytesIncoming = result.bytesIncoming;
+          if (onHttpResponseHeader) {
+            await onHttpResponseHeader(ctx);
+          }
+          if (ctx.response.body) {
+            state.complete = true;
+            resolve(result);
+          }
+        },
+        onEnd: async (result) => {
+          ctx.requestForward.timeOnResponseBody = result.timeOnResponseBody;
+          ctx.requestForward.timeOnResponseEnd = result.timeOnResponseEnd;
+          ctx.requestForward.bytesIncoming = result.bytesIncoming;
+          ctx.requestForward.bytesResponseBody = result.bytesResponseBody;
+          if (!ctx.response.body) {
+            ctx.response.body = result.body;
+          }
+          if (onHttpResponseEnd) {
+            await onHttpResponseEnd(ctx);
+          }
+        },
       },
+      () => getSocketConnect({
+        hostname: options.hostname,
+        servername: options.servername,
+        port: options.port,
+        protocol: options.protocol || 'http:',
+      }),
     )
+      .then(
+        (result) => {
+          if (!state.complete) {
+            state.complete = true;
+            resolve(result);
+          }
+        },
+        (error) => {
+          if (!signal || !signal.aborted) {
+            if (error.state.timeOnConnect == null) {
+              error.statusCode = 502;
+            } else if (error instanceof NetConnectTimeoutError) {
+              error.statusCode = 504;
+            } else {
+              error.statusCode = 500;
+            }
+          }
+          ctx.error = error;
+          if (!state.complete) {
+            state.complete = true;
+            reject(error);
+          }
+        },
+      );
+  });
 };
