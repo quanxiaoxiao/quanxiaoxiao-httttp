@@ -21,6 +21,8 @@ import attachResponseError from './attachResponseError.mjs';
 import generateResponse from './generateResponse.mjs';
 import generateRequestContext from './generateRequestContext.mjs';
 
+const calcTimeByRequest = (ctx) => performance.now() - ctx.request.timeOnStart;
+
 export default ({
   socket,
   onClose,
@@ -37,33 +39,30 @@ export default ({
   const controller = new AbortController();
 
   const state = {
+    ctx: null,
     dateTimeCreate: Date.now(),
     timeOnStart: performance.now(),
-    timeOnActive: null,
-    timeOnLastActive: null,
     bytesIncoming: 0,
     bytesOutgoing: 0,
-    ctx: null,
     count: 0,
-    step: -1,
+    currentStep: -1,
     execute: null,
     connector: null,
   };
 
-  const calcTimeByRequest = (ctx) => performance.now() - ctx.request.timeOnStart;
-
-  const outgoning = (buf) => {
+  const doOutgoning = (buf, ctx) => {
     const size = buf.length;
     if (!controller.signal.aborted && size > 0) {
       try {
         if (onChunkOutgoing) {
-          onChunkOutgoing(buf);
+          onChunkOutgoing(ctx, buf);
         }
         const ret = state.connector.write(buf);
         state.bytesOutgoing += size;
         return ret;
-      } catch (error) { // eslint-disable-line
+      } catch (error) {
         if (!controller.signal.aborted) {
+          ctx.error = error;
           controller.abort();
         }
         return false;
@@ -73,14 +72,17 @@ export default ({
   };
 
   const doResponseEnd = () => {
-    const { ctx } = state;
-    state.step = -1;
-    state.ctx = null;
-    if (onHttpResponseEnd) {
-      try {
-        onHttpResponseEnd(ctx);
-      } catch (error) {
-        console.warn(error);
+    assert(state.ctx != null);
+    if (!controller.signal.aborted) {
+      const { ctx } = state;
+      state.currentStep = -1;
+      state.ctx = null;
+      if (onHttpResponseEnd) {
+        try {
+          onHttpResponseEnd(ctx);
+        } catch (error) {
+          console.warn(error);
+        }
       }
     }
   };
@@ -132,19 +134,17 @@ export default ({
           statusCode: ctx.response.statusCode,
           headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
           body: new PassThrough(),
-          onHeader: outgoning,
+          onHeader: (chunk) => doOutgoning(chunk, ctx),
         });
         process.nextTick(() => {
           try {
             wrapStreamRead({
               signal: controller.signal,
               stream: ctx.response.body,
-              onData: (chunk) => outgoning(encodeHttpResponse(chunk)),
+              onData: (chunk) => doOutgoning(encodeHttpResponse(chunk), ctx),
               onEnd: () => {
-                outgoning(encodeHttpResponse());
-                if (!controller.signal.aborted) {
-                  doResponseEnd();
-                }
+                doOutgoning(encodeHttpResponse(), ctx);
+                doResponseEnd();
               },
               onError: (error) => {
                 console.log(error);
@@ -165,7 +165,7 @@ export default ({
         });
       } else {
         try {
-          outgoning(encodeHttp(generateResponse(ctx)));
+          doOutgoning(encodeHttp(generateResponse(ctx)), ctx);
           doResponseEnd();
         } catch (error) {
           handleError(error, ctx);
@@ -177,7 +177,7 @@ export default ({
   const bindExcute = (ctx) => {
     state.execute = decodeHttpRequest({
       onStartLine: async (ret) => {
-        state.step = 1;
+        state.currentStep = 1;
         ctx.request.timeOnStartLine = calcTimeByRequest(ctx);
         ctx.request.httpVersion = ret.httpVersion;
         ctx.request.method = ret.method;
@@ -192,8 +192,8 @@ export default ({
         }
       },
       onHeader: async (ret) => {
-        assert(state.step === 1);
-        state.step = 2;
+        assert(state.currentStep === 1);
+        state.currentStep = 2;
         ctx.request.headersRaw = ret.headersRaw;
         ctx.request.headers = ret.headers;
         ctx.request.timeOnHeader = calcTimeByRequest(ctx);
@@ -234,15 +234,15 @@ export default ({
         assert(!controller.signal.aborted);
         if (ctx.request.timeOnBody == null) {
           ctx.request.timeOnBody = calcTimeByRequest(ctx);
-          assert(state.step === 2);
-          state.step = 3;
+          assert(state.currentStep === 2);
+          state.currentStep = 3;
         }
         assert(ctx.request._write);
         ctx.request._write(chunk);
       },
       onEnd: async () => {
-        assert(state.step < 4);
-        state.step = 4;
+        assert(state.currentStep < 4);
+        state.currentStep = 4;
         ctx.request.timeOnEnd = calcTimeByRequest(ctx);
         if (ctx.request.timeOnBody == null) {
           ctx.request.timeOnBody = ctx.request.timeOnEnd;
@@ -294,38 +294,33 @@ export default ({
       );
   };
 
+  const handleDataOnSocket = (chunk) => {
+    assert(!controller.signal.aborted);
+    const size = chunk.length;
+    state.bytesIncoming += size;
+    if (!state.ctx) {
+      state.currentStep = 0;
+      state.count += 1;
+      state.ctx = generateRequestContext({
+        socket,
+        signal: controller.signal,
+      });
+      if (onHttpRequest) {
+        onHttpRequest(state.ctx);
+      }
+      bindExcute(state.ctx);
+    }
+    if (size > 0) {
+      if (onChunkIncoming) {
+        onChunkIncoming(state.ctx, chunk);
+      }
+      execute(chunk);
+    }
+  };
+
   state.connector = createConnector(
     {
-      onData: (chunk) => {
-        assert(!controller.signal.aborted);
-        const size = chunk.length;
-        state.bytesIncoming += size;
-        const now = performance.now();
-        if (state.timeOnActive == null) {
-          state.timeOnLastActive = now;
-        } else {
-          state.timeOnLastActive = state.timeOnActive;
-        }
-        state.timeOnActive = now;
-        if (!state.ctx) {
-          state.step = 0;
-          state.count += 1;
-          state.ctx = generateRequestContext({
-            socket,
-            signal: controller.signal,
-          });
-          if (onHttpRequest) {
-            onHttpRequest(state.ctx);
-          }
-          bindExcute(state.ctx);
-        }
-        if (size > 0) {
-          if (onChunkIncoming) {
-            onChunkIncoming(state.ctx, chunk);
-          }
-          execute(chunk);
-        }
-      },
+      onData: handleDataOnSocket,
       onDrain: () => {
         if (state.ctx
           && state.ctx.response
