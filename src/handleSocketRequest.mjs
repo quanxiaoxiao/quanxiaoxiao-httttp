@@ -30,6 +30,8 @@ export default ({
   onHttpResponse,
   onHttpResponseEnd,
   onHttpError,
+  onChunkIncoming,
+  onChunkOutgoing,
 }) => {
   const controller = new AbortController();
 
@@ -47,10 +49,15 @@ export default ({
     connector: null,
   };
 
+  const calcTimeByRequest = (ctx) => performance.now() - ctx.request.timeOnStart;
+
   const outgoning = (buf) => {
     const size = buf.length;
     if (!controller.signal.aborted && size > 0) {
       try {
+        if (onChunkOutgoing) {
+          onChunkOutgoing(buf);
+        }
         const ret = state.connector.write(buf);
         state.bytesOutgoing += size;
         return ret;
@@ -76,8 +83,6 @@ export default ({
       }
     }
   };
-
-  const calcTimeByRequest = () => performance.now() - state.ctx.request.timeOnStart;
 
   const doResponseError = (ctx) => {
     if (!controller.signal.aborted) {
@@ -172,7 +177,7 @@ export default ({
     state.execute = decodeHttpRequest({
       onStartLine: async (ret) => {
         state.step = 1;
-        ctx.request.timeOnStartLine = calcTimeByRequest();
+        ctx.request.timeOnStartLine = calcTimeByRequest(ctx);
         ctx.request.httpVersion = ret.httpVersion;
         ctx.request.method = ret.method;
         const [pathname, querystring, query] = parseHttpPath(ret.path);
@@ -190,7 +195,7 @@ export default ({
         state.step = 2;
         ctx.request.headersRaw = ret.headersRaw;
         ctx.request.headers = ret.headers;
-        ctx.request.timeOnHeader = calcTimeByRequest();
+        ctx.request.timeOnHeader = calcTimeByRequest(ctx);
         if (onHttpRequestHeader) {
           await onHttpRequestHeader(ctx);
           assert(!controller.signal.aborted);
@@ -227,7 +232,7 @@ export default ({
       onBody: (chunk) => {
         assert(!controller.signal.aborted);
         if (ctx.request.timeOnBody == null) {
-          ctx.request.timeOnBody = calcTimeByRequest();
+          ctx.request.timeOnBody = calcTimeByRequest(ctx);
           assert(state.step === 2);
           state.step = 3;
         }
@@ -237,7 +242,7 @@ export default ({
       onEnd: async () => {
         assert(state.step < 4);
         state.step = 4;
-        ctx.request.timeOnEnd = calcTimeByRequest();
+        ctx.request.timeOnEnd = calcTimeByRequest(ctx);
         if (ctx.request.timeOnBody == null) {
           ctx.request.timeOnBody = ctx.request.timeOnEnd;
         }
@@ -347,6 +352,9 @@ export default ({
           attachContext();
         }
         if (!controller.signal.aborted && size > 0) {
+          if (onChunkIncoming) {
+            onChunkIncoming(state.ctx, chunk);
+          }
           execute(chunk);
         }
       },
