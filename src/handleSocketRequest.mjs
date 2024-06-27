@@ -107,7 +107,7 @@ export default ({
     }
   };
 
-  const handleError = (error, ctx) => {
+  const handleHttpError = (error, ctx) => {
     if (!controller.signal.aborted) {
       ctx.error = error;
       doResponseError(ctx);
@@ -122,7 +122,7 @@ export default ({
       try {
         await onHttpResponse(ctx);
       } catch (error) {
-        handleError(error, ctx);
+        handleHttpError(error, ctx);
       }
     }
     if (!ctx.error
@@ -168,7 +168,7 @@ export default ({
           doOutgoning(encodeHttp(generateResponse(ctx)), ctx);
           doResponseEnd();
         } catch (error) {
-          handleError(error, ctx);
+          handleHttpError(error, ctx);
         }
       }
     }
