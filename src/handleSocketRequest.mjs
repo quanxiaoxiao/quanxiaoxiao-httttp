@@ -19,6 +19,7 @@ import {
 } from '@quanxiaoxiao/node-utils';
 import attachResponseError from './attachResponseError.mjs';
 import generateResponse from './generateResponse.mjs';
+import generateRequestContext from './generateRequestContext.mjs';
 
 export default ({
   socket,
@@ -259,48 +260,6 @@ export default ({
     });
   };
 
-  const attachContext = () => {
-    state.step = 0;
-    state.count += 1;
-    state.ctx = {
-      socket,
-      signal: controller.signal,
-      request: {
-        dateTimeCreate: Date.now(),
-        timeOnStart: performance.now(),
-        timeOnStartLine: null,
-        timeOnHeader: null,
-        timeOnBody: null,
-        timeOnEnd: null,
-        connection: false,
-        method: null,
-        path: null,
-        httpVersion: null,
-        headersRaw: [],
-        headers: {},
-        body: null,
-        pathname: null,
-        querystring: '',
-        query: {},
-      },
-      response: null,
-      error: null,
-    };
-    if (onHttpRequest) {
-      try {
-        onHttpRequest(state.ctx);
-        assert(state.ctx.response == null);
-      } catch (error) {
-        state.ctx.error = error;
-      }
-    }
-    if (state.ctx.error) {
-      doResponseError(state.ctx);
-    } else if (!controller.signal.aborted) {
-      bindExcute(state.ctx);
-    }
-  };
-
   const execute = (chunk) => {
     state.execute(chunk)
       .then(
@@ -349,9 +308,18 @@ export default ({
         }
         state.timeOnActive = now;
         if (!state.ctx) {
-          attachContext();
+          state.step = 0;
+          state.count += 1;
+          state.ctx = generateRequestContext({
+            socket,
+            signal: controller.signal,
+          });
+          if (onHttpRequest) {
+            onHttpRequest(state.ctx);
+          }
+          bindExcute(state.ctx);
         }
-        if (!controller.signal.aborted && size > 0) {
+        if (size > 0) {
           if (onChunkIncoming) {
             onChunkIncoming(state.ctx, chunk);
           }

@@ -1,0 +1,27 @@
+export default ({
+  socket,
+  signal,
+}) => ({
+  socket,
+  signal,
+  request: {
+    dateTimeCreate: Date.now(),
+    timeOnStart: performance.now(),
+    timeOnStartLine: null,
+    timeOnHeader: null,
+    timeOnBody: null,
+    timeOnEnd: null,
+    connection: false,
+    method: null,
+    path: null,
+    httpVersion: null,
+    headersRaw: [],
+    headers: {},
+    body: null,
+    pathname: null,
+    querystring: '',
+    query: {},
+  },
+  response: null,
+  error: null,
+});
