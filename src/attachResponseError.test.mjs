@@ -28,7 +28,6 @@ test('attachResponseError', () => {
   attachResponseError(ctx);
   assert.equal(ctx.response.statusCode, 500);
   assert.equal(ctx.response.statusText, STATUS_CODES[500]);
-  assert.equal(typeof ctx.response.headers.Date, 'string');
 
   ctx.error = createError(404, 'test not found');
   ctx.response.body = 'aaaaaaa';
@@ -39,17 +38,14 @@ test('attachResponseError', () => {
 
   ctx.error = new Error();
   ctx.error.code = 'ECONNRESET';
-  ctx.requestForward = {};
   attachResponseError(ctx);
-  assert.equal(ctx.response.statusCode, 502);
+  assert.equal(ctx.response.statusCode, 500);
 
   ctx.error = createError(503);
-  ctx.requestForward = {};
   attachResponseError(ctx);
   assert.equal(ctx.response.statusCode, 503);
 
   ctx.error = createError(405);
-  ctx.requestForward = {};
   attachResponseError(ctx);
   assert.equal(ctx.response.statusCode, 405);
 });

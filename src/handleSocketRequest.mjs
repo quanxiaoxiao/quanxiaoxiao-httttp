@@ -47,7 +47,7 @@ export default ({
     connector: null,
   };
 
-  const sendBuffer = (buf) => {
+  const outgoning = (buf) => {
     const size = buf.length;
     if (!controller.signal.aborted && size > 0) {
       try {
@@ -126,16 +126,16 @@ export default ({
           statusCode: ctx.response.statusCode,
           headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
           body: new PassThrough(),
-          onHeader: sendBuffer,
+          onHeader: outgoning,
         });
         process.nextTick(() => {
           try {
             wrapStreamRead({
               signal: controller.signal,
               stream: ctx.response.body,
-              onData: (chunk) => sendBuffer(encodeHttpResponse(chunk)),
+              onData: (chunk) => outgoning(encodeHttpResponse(chunk)),
               onEnd: () => {
-                sendBuffer(encodeHttpResponse());
+                outgoning(encodeHttpResponse());
                 if (!controller.signal.aborted) {
                   doResponseEnd();
                 }
@@ -159,7 +159,7 @@ export default ({
         });
       } else {
         try {
-          sendBuffer(encodeHttp(generateResponse(ctx)));
+          outgoning(encodeHttp(generateResponse(ctx)));
           doResponseEnd();
         } catch (error) {
           handleError(error, ctx);
