@@ -148,9 +148,8 @@ export default ({
                 doResponseEnd();
               },
               onError: (error) => {
-                console.log(error);
-                console.warn(`response.body stream error \`${error.message}\``);
                 if (!controller.signal.aborted) {
+                  console.warn(`response.body stream error \`${error.message}\``);
                   state.connector();
                   controller.abort();
                 }

@@ -11,6 +11,8 @@ export default ({
   options,
   ctx,
   onRequest,
+  onChunkIncoming,
+  onChunkOutgoing,
   onHttpResponseStartLine,
   onHttpResponseHeader,
   onHttpResponseEnd,
@@ -61,6 +63,8 @@ export default ({
   return new Promise((resolve, reject) => {
     request(
       {
+        onChunkIncoming,
+        onChunkOutgoing,
         method: options.method || 'GET',
         path: options.path || '/',
         headers: options.headers || {},
@@ -122,6 +126,7 @@ export default ({
         hostname: options.hostname,
         servername: options.servername,
         port: options.port,
+        rejectUnauthorized: options.rejectUnauthorized ?? true,
         protocol: options.protocol || 'http:',
       }),
     )
