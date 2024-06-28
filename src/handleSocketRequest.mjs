@@ -335,9 +335,9 @@ export default ({
         controller.abort();
         if (state.ctx) {
           state.ctx.error = new Error('Socket Close Error');
-          if (onClose) {
-            onClose(state.ctx);
-          }
+        }
+        if (onClose) {
+          onClose(state.ctx);
         }
       },
       onError: (error) => {
@@ -345,9 +345,9 @@ export default ({
           controller.abort();
           if (state.ctx) {
             state.ctx.error = error;
-            if (onClose) {
-              onClose(state.ctx);
-            }
+          }
+          if (onClose) {
+            onClose(state.ctx);
           }
         }
       },
