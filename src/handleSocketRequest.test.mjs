@@ -1324,7 +1324,7 @@ test('handleSocketRequest ctx.response.body with stream backpress', async () => 
   server.close();
 });
 
-test('handleSocketRequest client socket close', async () => {
+test('handleSocketRequest client socket close 1', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
   const onClose = mock.fn(() => {});
@@ -1352,6 +1352,38 @@ test('handleSocketRequest client socket close', async () => {
   assert.equal(onHttpError.mock.calls.length, 0);
   assert.equal(onClose.mock.calls[0].arguments[0], null);
   assert.equal(onClose.mock.calls[0].arguments[0], null);
+  server.close();
+});
+
+test('handleSocketRequest client socket close 2', async () => {
+  const port = getPort();
+  const onHttpError = mock.fn(() => {});
+  const onClose = mock.fn(() => {});
+
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onClose,
+      onHttpError,
+    });
+  });
+  server.listen(port);
+
+  await waitFor(100);
+  const handleDataOnSocket = mock.fn(() => {});
+  const socket = getSocketConnect({ port });
+  socket.on('data', handleDataOnSocket);
+  socket.on('connect', () => {
+    socket.write('GET /aaa HTTP/1.1\r\nName: quan\r\n');
+    setTimeout(() => {
+      socket.destroy();
+    }, 500);
+  });
+  await waitFor(1000);
+  assert.equal(onClose.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 0);
+  assert.equal(onClose.mock.calls[0].arguments[0].request.pathname, '/aaa');
+  assert.deepEqual(onClose.mock.calls[0].arguments[0].request.headers, {});
   server.close();
 });
 

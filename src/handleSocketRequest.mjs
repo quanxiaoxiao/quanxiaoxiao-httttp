@@ -108,6 +108,7 @@ export default ({
   };
 
   const handleHttpError = (error, ctx) => {
+    assert(error instanceof Error);
     if (!controller.signal.aborted) {
       ctx.error = error;
       doResponseError(ctx);
