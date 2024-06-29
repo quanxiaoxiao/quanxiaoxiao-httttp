@@ -53,10 +53,10 @@ export default ({
   const doOutgoning = (buf, ctx) => {
     const size = buf.length;
     if (!controller.signal.aborted && size > 0) {
+      if (onChunkOutgoing) {
+        onChunkOutgoing(ctx, buf);
+      }
       try {
-        if (onChunkOutgoing) {
-          onChunkOutgoing(ctx, buf);
-        }
         const ret = state.connector.write(buf);
         state.bytesOutgoing += size;
         return ret;
@@ -118,7 +118,7 @@ export default ({
   };
 
   const doResponse = async (ctx) => {
-    assert(!ctx.error);
+    assert(ctx.error == null);
     if (!controller.signal.aborted && onHttpResponse) {
       try {
         await onHttpResponse(ctx);
