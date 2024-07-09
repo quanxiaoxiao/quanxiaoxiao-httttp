@@ -1,4 +1,6 @@
-import { Readable } from 'node:stream';
+import { Readable, PassThrough } from 'node:stream';
+import { decodeContentToJSON } from '@quanxiaoxiao/http-utils';
+import { wrapStreamRead } from '@quanxiaoxiao/node-utils';
 import createError from 'http-errors';
 
 export default (routeMatchList, logger) => ({
@@ -26,8 +28,26 @@ export default (routeMatchList, logger) => ({
     if (ctx.socket.writable && ctx.routeMatched.onPre) {
       await ctx.routeMatched.onPre(ctx);
     }
+    if (ctx.requestHandler.validate) {
+      ctx.request.body = new PassThrough();
+      ctx.request.dataBuf = Buffer.from([]);
+      wrapStreamRead({
+        signal: ctx.signal,
+        stream: ctx.request.body,
+        onData: (chunk) => {
+          ctx.request.dataBuf = Buffer.concat([ctx.request.dataBuf, chunk]);
+        },
+      });
+    }
   },
   onHttpResponse: async (ctx) => {
+    if (ctx.requestHandler.validate) {
+      const data = decodeContentToJSON(ctx.request.dataBuf, ctx.request.headers);
+      if (!ctx.requestHandler.validate(data)) {
+        throw createError(400, JSON.stringify(ctx.requestHandler.validate.errors));
+      }
+      ctx.request.data = data;
+    }
     await ctx.requestHandler.fn(ctx);
     if (ctx.routeMatched.select && !(ctx.response.body instanceof Readable)) {
       ctx.response.data = ctx.routeMatched.select(ctx.response.data);
