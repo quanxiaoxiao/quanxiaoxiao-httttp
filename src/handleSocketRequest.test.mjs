@@ -1417,3 +1417,47 @@ test('handleSocketRequest server socket close', async () => {
   assert.equal(handleDataOnSocket.mock.calls.length, 0);
   server.close();
 });
+
+test('handleSocketRequest response.body stream 222', async () => {
+  const port = getPort();
+  const handleDataOnSocket = mock.fn(() => {});
+
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpResponse: (ctx) => {
+        ctx.response = {
+          headers: {
+            'Cache-Control': 'no-store',
+            'Keep-Alive': 'timeout=45',
+          },
+          body: new PassThrough(),
+        };
+        setTimeout(() => {
+          ctx.response.body.end('aaa');
+        }, 3000);
+        setTimeout(() => {
+          ctx.socket.destroy();
+        }, 3500);
+      },
+    });
+  });
+
+  server.listen(port);
+
+  await waitFor(100);
+  const socket = getSocketConnect({ port });
+  socket.on('data', handleDataOnSocket);
+  socket.on('connect', () => {
+    socket.write('GET /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 0\r\n\r\n');
+  });
+  await waitFor(200);
+  assert.equal(handleDataOnSocket.mock.calls.length, 1);
+  assert.equal(
+    handleDataOnSocket.mock.calls[0].arguments[0].toString(),
+    'HTTP/1.1 200 OK\r\nCache-Control: no-store\r\nKeep-Alive: timeout=45\r\nTransfer-Encoding: chunked\r\n\r\n',
+  );
+  await waitFor(5000);
+  assert.equal(handleDataOnSocket.mock.calls.length, 2);
+  server.close();
+});

@@ -126,19 +126,17 @@ export default ({
         handleHttpError(error, ctx);
       }
     }
-    if (!ctx.error
-      && !controller.signal.aborted
-      && ctx.socket.writable) {
+    if (!ctx.error && !controller.signal.aborted) {
       if (ctx.response && ctx.response.body instanceof Readable) {
         assert(!Object.hasOwnProperty.call(ctx.response, 'data'));
         const encodeHttpResponse = encodeHttp({
           statusCode: ctx.response.statusCode,
           headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
-          body: new PassThrough(),
+          body: ctx.response.body,
           onHeader: (chunk) => doOutgoning(chunk, ctx),
         });
         process.nextTick(() => {
-          try {
+          if (!controller.signal.aborted && ctx.response.body.readable) {
             wrapStreamRead({
               signal: controller.signal,
               stream: ctx.response.body,
@@ -155,12 +153,8 @@ export default ({
                 }
               },
             });
-          } catch (error) {
-            console.warn(error);
-            if (!controller.signal.aborted) {
-              state.connector();
-              controller.abort();
-            }
+          } else if (!ctx.response.body.destroyed) {
+            ctx.response.body.destroy();
           }
         });
       } else {
