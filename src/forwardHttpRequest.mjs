@@ -101,11 +101,9 @@ export default ({
             await onHttpResponseHeader(ctx);
           }
           if (ctx.response.body) {
-            if (result.statusCode === 200) {
+            if (!signal || !signal.aborted) {
               state.complete = true;
               resolve(result);
-            } else {
-              ctx.response.body = null;
             }
           }
         },
@@ -133,8 +131,10 @@ export default ({
       .then(
         (result) => {
           if (!state.complete) {
-            state.complete = true;
-            resolve(result);
+            if (!signal || !signal.aborted) {
+              state.complete = true;
+              resolve(result);
+            }
           }
         },
         (error) => {
