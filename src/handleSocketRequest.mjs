@@ -112,8 +112,6 @@ export default ({
     if (!controller.signal.aborted) {
       ctx.error = error;
       doResponseError(ctx);
-    } else {
-      console.warn(error);
     }
   };
 
@@ -327,7 +325,7 @@ export default ({
       onClose: () => {
         assert(!controller.signal.aborted);
         controller.abort();
-        if (state.ctx) {
+        if (state.ctx && !state.ctx.error) {
           state.ctx.error = new Error('Socket Close Error');
         }
         if (onClose) {
@@ -337,7 +335,7 @@ export default ({
       onError: (error) => {
         if (!controller.signal.aborted) {
           controller.abort();
-          if (state.ctx) {
+          if (state.ctx && !state.ctx.error) {
             state.ctx.error = error;
           }
           if (onClose) {

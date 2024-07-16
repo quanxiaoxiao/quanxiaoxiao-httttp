@@ -1,3 +1,4 @@
+import assert from 'node:assert';
 import { Readable, PassThrough } from 'node:stream';
 import { decodeContentToJSON } from '@quanxiaoxiao/http-utils';
 import { wrapStreamRead } from '@quanxiaoxiao/node-utils';
@@ -59,6 +60,7 @@ export default (routeMatchList, logger) => ({
     }
   },
   onHttpError: (ctx) => {
+    assert(!!ctx.error);
     const message = `$$${ctx.request.method} ${ctx.request.path} ${ctx.response.statusCode} ${ctx.error.message}`;
     if (logger) {
       logger.warn(message);
