@@ -25,7 +25,7 @@ const calcTimeByRequest = (ctx) => performance.now() - ctx.request.timeOnStart;
 
 export default ({
   socket,
-  onClose,
+  onSocketClose,
   onHttpRequest,
   onHttpRequestStartLine,
   onHttpRequestHeader,
@@ -40,6 +40,7 @@ export default ({
 
   const state = {
     ctx: null,
+    isSocketCloseEmit: false,
     dateTimeCreate: Date.now(),
     timeOnStart: performance.now(),
     bytesIncoming: 0,
@@ -310,6 +311,18 @@ export default ({
     }
   };
 
+  const emitSocketClose = () => {
+    if (!state.isSocketCloseEmit && onSocketClose) {
+      state.isSocketCloseEmit = true;
+      onSocketClose({
+        dateTimeCreate: state.dateTimeCreate,
+        bytesIncoming: state.bytesIncoming,
+        bytesOutgoing: state.bytesOutgoing,
+        count: state.count,
+      });
+    }
+  };
+
   state.connector = createConnector(
     {
       onData: handleDataOnSocket,
@@ -328,9 +341,7 @@ export default ({
         if (state.ctx && !state.ctx.error) {
           state.ctx.error = new Error('Socket Close Error');
         }
-        if (onClose) {
-          onClose(state.ctx);
-        }
+        emitSocketClose();
       },
       onError: (error) => {
         if (!controller.signal.aborted) {
@@ -338,10 +349,8 @@ export default ({
           if (state.ctx && !state.ctx.error) {
             state.ctx.error = error;
           }
-          if (onClose) {
-            onClose(state.ctx);
-          }
         }
+        emitSocketClose();
       },
     },
     () => socket,

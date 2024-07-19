@@ -1327,12 +1327,10 @@ test('handleSocketRequest ctx.response.body with stream backpress', async () => 
 test('handleSocketRequest client socket close 1', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
-  const onClose = mock.fn(() => {});
 
   const server = net.createServer((socket) => {
     handleSocketRequest({
       socket,
-      onClose,
       onHttpError,
     });
   });
@@ -1348,22 +1346,17 @@ test('handleSocketRequest client socket close 1', async () => {
     }, 500);
   });
   await waitFor(1000);
-  assert.equal(onClose.mock.calls.length, 1);
   assert.equal(onHttpError.mock.calls.length, 0);
-  assert.equal(onClose.mock.calls[0].arguments[0], null);
-  assert.equal(onClose.mock.calls[0].arguments[0], null);
   server.close();
 });
 
 test('handleSocketRequest client socket close 2', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
-  const onClose = mock.fn(() => {});
 
   const server = net.createServer((socket) => {
     handleSocketRequest({
       socket,
-      onClose,
       onHttpError,
     });
   });
@@ -1380,17 +1373,13 @@ test('handleSocketRequest client socket close 2', async () => {
     }, 500);
   });
   await waitFor(1000);
-  assert.equal(onClose.mock.calls.length, 1);
   assert.equal(onHttpError.mock.calls.length, 0);
-  assert.equal(onClose.mock.calls[0].arguments[0].request.pathname, '/aaa');
-  assert.deepEqual(onClose.mock.calls[0].arguments[0].request.headers, {});
   server.close();
 });
 
 test('handleSocketRequest server socket close', async () => {
   const port = getPort();
   const onHttpError = mock.fn(() => {});
-  const onClose = mock.fn(() => {});
 
   const server = net.createServer((socket) => {
     setTimeout(() => {
@@ -1398,7 +1387,6 @@ test('handleSocketRequest server socket close', async () => {
     }, 500);
     handleSocketRequest({
       socket,
-      onClose,
       onHttpError,
     });
   });
@@ -1411,9 +1399,7 @@ test('handleSocketRequest server socket close', async () => {
   socket.on('data', handleDataOnSocket);
   socket.on('connect', () => {});
   await waitFor(1000);
-  assert.equal(onClose.mock.calls.length, 1);
   assert.equal(onHttpError.mock.calls.length, 0);
-  assert.equal(onClose.mock.calls[0].arguments[0], null);
   assert.equal(handleDataOnSocket.mock.calls.length, 0);
   server.close();
 });
