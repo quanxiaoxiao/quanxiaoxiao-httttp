@@ -28,6 +28,7 @@ export default (routeMatchList, logger) => ({
 
     if (ctx.socket.writable && ctx.routeMatched.onPre) {
       await ctx.routeMatched.onPre(ctx);
+      assert(!ctx.signal.aborted);
     }
     if (ctx.requestHandler.validate) {
       ctx.request.body = new PassThrough();
