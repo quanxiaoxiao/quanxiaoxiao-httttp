@@ -272,9 +272,11 @@ export default ({
         (error) => {
           if (!controller.signal.aborted) {
             if (state.ctx) {
-              state.ctx.error = error;
-              if (error instanceof DecodeHttpError) {
-                error.statusCode = 400;
+              if (state.ctx.error == null) {
+                state.ctx.error = error;
+                if (error instanceof DecodeHttpError) {
+                  state.ctx.error.statusCode = 400;
+                }
               }
               doResponseError(state.ctx);
             } else {
