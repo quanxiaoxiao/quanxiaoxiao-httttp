@@ -1,4 +1,5 @@
 import assert from 'node:assert';
+import { EventEmitter } from 'node:events';
 import {
   PassThrough,
   Readable,
@@ -23,9 +24,13 @@ import generateRequestContext from './generateRequestContext.mjs';
 
 const calcTimeByRequest = (ctx) => performance.now() - ctx.request.timeOnStart;
 
+const promisess = async (fn, ...args) => {
+  const ret = await fn(...args);
+  return ret;
+};
+
 export default ({
   socket,
-  onSocketClose,
   onHttpRequest,
   onHttpRequestStartLine,
   onHttpRequestHeader,
@@ -37,6 +42,8 @@ export default ({
   onChunkOutgoing,
 }) => {
   const controller = new AbortController();
+
+  const emitter = new EventEmitter();
 
   const state = {
     ctx: null,
@@ -51,14 +58,14 @@ export default ({
     connector: null,
   };
 
-  const doOutgoning = (buf, ctx) => {
-    const size = buf.length;
+  const doOutgoning = (chunk, ctx) => {
+    const size = chunk.length;
     if (!controller.signal.aborted && size > 0) {
       if (onChunkOutgoing) {
-        onChunkOutgoing(ctx, buf);
+        onChunkOutgoing(ctx, chunk);
       }
       try {
-        const ret = state.connector.write(buf);
+        const ret = state.connector.write(chunk);
         state.bytesOutgoing += size;
         return ret;
       } catch (error) {
@@ -111,59 +118,95 @@ export default ({
   const handleHttpError = (error, ctx) => {
     assert(error instanceof Error);
     if (!controller.signal.aborted) {
-      ctx.error = error;
+      if (ctx.error == null) {
+        ctx.error = error;
+      }
       doResponseError(ctx);
     }
   };
 
-  const doResponse = async (ctx) => {
+  const doResponse = (ctx) => {
     assert(ctx.error == null);
-    if (!controller.signal.aborted && onHttpResponse) {
+    if (ctx.response && ctx.response.body instanceof Readable) {
+      assert(!Object.hasOwnProperty.call(ctx.response, 'data'));
+      const encodeHttpResponse = encodeHttp({
+        statusCode: ctx.response.statusCode,
+        headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
+        body: ctx.response.body,
+        onHeader: (chunk) => doOutgoning(chunk, ctx),
+      });
+      process.nextTick(() => {
+        if (!controller.signal.aborted && ctx.response.body.readable) {
+          wrapStreamRead({
+            signal: controller.signal,
+            stream: ctx.response.body,
+            onData: (chunk) => doOutgoning(encodeHttpResponse(chunk), ctx),
+            onEnd: () => {
+              doOutgoning(encodeHttpResponse(), ctx);
+              doResponseEnd();
+            },
+            onError: (error) => {
+              if (!controller.signal.aborted) {
+                console.warn(`response.body stream error \`${error.message}\``);
+                state.connector();
+                controller.abort();
+              }
+            },
+          });
+        } else if (!ctx.response.body.destroyed) {
+          ctx.response.body.destroy();
+        }
+      });
+    } else {
       try {
-        await onHttpResponse(ctx);
+        doOutgoning(encodeHttp(generateResponse(ctx)), ctx);
+        doResponseEnd();
       } catch (error) {
         handleHttpError(error, ctx);
       }
     }
-    if (!ctx.error && !controller.signal.aborted) {
-      if (ctx.response && ctx.response.body instanceof Readable) {
-        assert(!Object.hasOwnProperty.call(ctx.response, 'data'));
-        const encodeHttpResponse = encodeHttp({
-          statusCode: ctx.response.statusCode,
-          headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
-          body: ctx.response.body,
-          onHeader: (chunk) => doOutgoning(chunk, ctx),
-        });
-        process.nextTick(() => {
-          if (!controller.signal.aborted && ctx.response.body.readable) {
-            wrapStreamRead({
-              signal: controller.signal,
-              stream: ctx.response.body,
-              onData: (chunk) => doOutgoning(encodeHttpResponse(chunk), ctx),
-              onEnd: () => {
-                doOutgoning(encodeHttpResponse(), ctx);
-                doResponseEnd();
-              },
-              onError: (error) => {
-                if (!controller.signal.aborted) {
-                  console.warn(`response.body stream error \`${error.message}\``);
-                  state.connector();
-                  controller.abort();
-                }
-              },
-            });
-          } else if (!ctx.response.body.destroyed) {
-            ctx.response.body.destroy();
-          }
-        });
-      } else {
-        try {
-          doOutgoning(encodeHttp(generateResponse(ctx)), ctx);
-          doResponseEnd();
-        } catch (error) {
-          handleHttpError(error, ctx);
-        }
+  };
+
+  emitter.on('httpRequestComplete', (ctx) => {
+    if (!controller.signal.aborted && ctx.error == null) {
+      if (!ctx.response || ctx.response.statusCode == null) {
+        emitter.emit('httpResponse', ctx);
       }
+    }
+  });
+
+  emitter.on('httpResponse', async (ctx) => {
+    assert(ctx.error == null);
+    if (!controller.signal.aborted) {
+      if (onHttpResponse) {
+        promisess(onHttpResponse, ctx)
+          .then(
+            () => {
+              if (!controller.signal.aborted) {
+                doResponse(ctx);
+              }
+            },
+            (error) => {
+              handleHttpError(error, ctx);
+            },
+          );
+      } else {
+        doResponse(ctx);
+      }
+    }
+  });
+
+  const emitSocketClose = (error) => {
+    if (state.isSocketCloseEmit) {
+      state.isSocketCloseEmit = true;
+      emitter.emit('socketClose', {
+        dateTimeCreate: state.dateTimeCreate,
+        bytesIncoming: state.bytesIncoming,
+        bytesOutgoing: state.bytesOutgoing,
+        count: state.count,
+        step: state.currentStep,
+        error,
+      });
     }
   };
 
@@ -179,6 +222,7 @@ export default ({
         ctx.request.pathname = pathname;
         ctx.request.querystring = querystring;
         ctx.request.query = query;
+        emitter.emit('httpRequestStartLine', ctx);
         if (onHttpRequestStartLine) {
           await onHttpRequestStartLine(ctx);
           assert(!controller.signal.aborted);
@@ -190,6 +234,7 @@ export default ({
         ctx.request.headersRaw = ret.headersRaw;
         ctx.request.headers = ret.headers;
         ctx.request.timeOnHeader = calcTimeByRequest(ctx);
+        emitter.emit('httpRequestHeader', ctx);
         if (onHttpRequestHeader) {
           await onHttpRequestHeader(ctx);
           assert(!controller.signal.aborted);
@@ -216,7 +261,7 @@ export default ({
               }
             },
             onEnd: () => {
-              doResponse(ctx);
+              emitter.emit('httpRequestComplete', ctx);
             },
           });
         } else if (ctx.request.body != null) {
@@ -240,6 +285,7 @@ export default ({
         if (ctx.request.timeOnBody == null) {
           ctx.request.timeOnBody = ctx.request.timeOnEnd;
         }
+        emitter.emit('httpRequestEnd', ctx);
         if (onHttpRequestEnd) {
           await onHttpRequestEnd(ctx);
           assert(!controller.signal.aborted);
@@ -247,7 +293,7 @@ export default ({
         if (ctx.request._write) {
           ctx.request._write();
         } else {
-          doResponse(ctx);
+          emitter.emit('httpRequestComplete', ctx);
         }
       },
     });
@@ -296,10 +342,10 @@ export default ({
     if (!state.ctx) {
       state.currentStep = 0;
       state.count += 1;
-      state.ctx = generateRequestContext({
-        socket,
-        signal: controller.signal,
-      });
+      state.ctx = generateRequestContext();
+      state.ctx.socket = socket;
+      state.ctx.signal = controller.signal;
+      state.ctx.emitter = emitter;
       if (onHttpRequest) {
         onHttpRequest(state.ctx);
       }
@@ -310,18 +356,6 @@ export default ({
         onChunkIncoming(state.ctx, chunk);
       }
       execute(chunk);
-    }
-  };
-
-  const emitSocketClose = () => {
-    if (!state.isSocketCloseEmit && onSocketClose) {
-      state.isSocketCloseEmit = true;
-      onSocketClose({
-        dateTimeCreate: state.dateTimeCreate,
-        bytesIncoming: state.bytesIncoming,
-        bytesOutgoing: state.bytesOutgoing,
-        count: state.count,
-      });
     }
   };
 
@@ -340,10 +374,13 @@ export default ({
       onClose: () => {
         assert(!controller.signal.aborted);
         controller.abort();
-        if (state.ctx && !state.ctx.error) {
-          state.ctx.error = new Error('Socket Close Error');
+        if (state.currentStep !== -1 && state.ctx && !state.ctx.error) {
+          const error = new Error('Socket Close Error');
+          state.ctx.error = error;
+          emitSocketClose(error);
+        } else {
+          emitSocketClose(null);
         }
-        emitSocketClose();
       },
       onError: (error) => {
         if (!controller.signal.aborted) {
@@ -352,9 +389,11 @@ export default ({
             state.ctx.error = error;
           }
         }
-        emitSocketClose();
+        emitSocketClose(error);
       },
     },
     () => socket,
   );
+
+  return emitter;
 };

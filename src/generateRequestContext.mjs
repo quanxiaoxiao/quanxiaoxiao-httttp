@@ -1,9 +1,4 @@
-export default ({
-  socket,
-  signal,
-}) => ({
-  socket,
-  signal,
+export default () => ({
   request: {
     dateTimeCreate: Date.now(),
     timeOnStart: performance.now(),

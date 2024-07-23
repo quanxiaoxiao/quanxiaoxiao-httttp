@@ -625,7 +625,6 @@ test('handleSocketRequest request chunk invalid', async () => {
   const onHttpRequestEnd = mock.fn(() => {});
   const onHttpResponseEnd = mock.fn(() => {});
   const onHttpError = mock.fn(() => { });
-  const onSocketClose = mock.fn(() => {});
 
   const server = net.createServer((socket) => {
     handleSocketRequest({
@@ -634,7 +633,6 @@ test('handleSocketRequest request chunk invalid', async () => {
       onHttpResponseEnd,
       onHttpRequestEnd,
       onHttpError,
-      onClose: onSocketClose,
     });
   });
   server.listen(port);
@@ -666,7 +664,6 @@ test('handleSocketRequest request chunk invalid', async () => {
   assert(/^HTTP\/1.1 400/.test(onData.mock.calls[0].arguments[0].toString()));
   assert(requestBody.destroyed);
   assert.equal(onClose.mock.calls.length, 1);
-  assert.equal(onSocketClose.mock.calls.length, 0);
   assert.equal(onError.mock.calls.length, 0);
   server.close();
 });
