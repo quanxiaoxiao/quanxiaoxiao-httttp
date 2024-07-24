@@ -92,12 +92,11 @@ export default ({
   const doResponseEnd = () => {
     assert(state.ctx != null);
     if (!controller.signal.aborted) {
-      const { ctx } = state;
       state.currentStep = STEP_RESPONSE_END;
-      state.ctx = null;
+      state.execute = null;
       if (onHttpResponseEnd) {
         try {
-          onHttpResponseEnd(ctx);
+          onHttpResponseEnd(state.ctx);
         } catch (error) {
           console.warn(error);
         }
@@ -334,7 +333,7 @@ export default ({
     assert(!controller.signal.aborted);
     const size = chunk.length;
     state.bytesIncoming += size;
-    if (!state.ctx) {
+    if (state.currentStep === STEP_EMPTY || state.currentStep === STEP_RESPONSE_END) {
       state.currentStep = STEP_REQUEST_START;
       state.count += 1;
       state.ctx = generateRequestContext();
@@ -407,11 +406,11 @@ export default ({
       onClose: () => {
         assert(!controller.signal.aborted);
         controller.abort();
-        if (state.currentStep !== STEP_RESPONSE_END
-          && state.currentStep !== STEP_RESPONSE_END
-          && state.ctx && !state.ctx.error) {
+        if (state.currentStep !== STEP_RESPONSE_END && state.currentStep !== STEP_EMPTY) {
           const error = new Error('Socket Close Error');
-          state.ctx.error = error;
+          if (!state.ctx.error) {
+            state.ctx.error = error;
+          }
           doSocketClose(error);
         } else {
           doSocketClose(null);
