@@ -287,42 +287,6 @@ export default ({
     });
   };
 
-  const execute = (chunk) => {
-    state.execute(chunk)
-      .then(
-        (ret) => {
-          if (!controller.signal.aborted
-            && ret.complete
-            && ret.dataBuf.length > 0) {
-            if (state.ctx) {
-              state.ctx.error = createError(400);
-              doResponseError(state.ctx);
-            } else {
-              state.connector();
-              controller.abort();
-            }
-          }
-        },
-        (error) => {
-          if (!controller.signal.aborted) {
-            if (state.ctx) {
-              if (state.ctx.error == null) {
-                state.ctx.error = error;
-                if (error instanceof DecodeHttpError) {
-                  state.ctx.error.statusCode = 400;
-                }
-              }
-              doResponseError(state.ctx);
-            } else {
-              console.warn(error);
-              state.connector();
-              controller.abort();
-            }
-          }
-        },
-      );
-  };
-
   const handleDataOnSocket = (chunk) => {
     assert(!controller.signal.aborted);
     const size = chunk.length;
@@ -342,7 +306,39 @@ export default ({
       if (onChunkIncoming) {
         onChunkIncoming(state.ctx, chunk);
       }
-      execute(chunk);
+      state.execute(chunk)
+        .then(
+          (ret) => {
+            if (!controller.signal.aborted
+              && ret.complete
+              && ret.dataBuf.length > 0) {
+              if (state.ctx) {
+                state.ctx.error = createError(400);
+                doResponseError(state.ctx);
+              } else {
+                state.connector();
+                controller.abort();
+              }
+            }
+          },
+          (error) => {
+            if (!controller.signal.aborted) {
+              if (state.ctx) {
+                if (state.ctx.error == null) {
+                  state.ctx.error = error;
+                  if (error instanceof DecodeHttpError) {
+                    state.ctx.error.statusCode = 400;
+                  }
+                }
+                doResponseError(state.ctx);
+              } else {
+                console.warn(error);
+                state.connector();
+                controller.abort();
+              }
+            }
+          },
+        );
     }
   };
 
