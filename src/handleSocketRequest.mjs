@@ -40,6 +40,7 @@ export default ({
   onHttpError,
   onChunkIncoming,
   onChunkOutgoing,
+  onSocketClose,
 }) => {
   const controller = new AbortController();
 
@@ -196,10 +197,10 @@ export default ({
     }
   });
 
-  const emitSocketClose = (error) => {
-    if (state.isSocketCloseEmit) {
+  const doSocketClose = (error) => {
+    if (onSocketClose && state.isSocketCloseEmit) {
       state.isSocketCloseEmit = true;
-      emitter.emit('socketClose', {
+      onSocketClose({
         dateTimeCreate: state.dateTimeCreate,
         bytesIncoming: state.bytesIncoming,
         bytesOutgoing: state.bytesOutgoing,
@@ -222,7 +223,6 @@ export default ({
         ctx.request.pathname = pathname;
         ctx.request.querystring = querystring;
         ctx.request.query = query;
-        emitter.emit('httpRequestStartLine', ctx);
         if (onHttpRequestStartLine) {
           await onHttpRequestStartLine(ctx);
           assert(!controller.signal.aborted);
@@ -234,7 +234,6 @@ export default ({
         ctx.request.headersRaw = ret.headersRaw;
         ctx.request.headers = ret.headers;
         ctx.request.timeOnHeader = calcTimeByRequest(ctx);
-        emitter.emit('httpRequestHeader', ctx);
         if (onHttpRequestHeader) {
           await onHttpRequestHeader(ctx);
           assert(!controller.signal.aborted);
@@ -285,7 +284,6 @@ export default ({
         if (ctx.request.timeOnBody == null) {
           ctx.request.timeOnBody = ctx.request.timeOnEnd;
         }
-        emitter.emit('httpRequestEnd', ctx);
         if (onHttpRequestEnd) {
           await onHttpRequestEnd(ctx);
           assert(!controller.signal.aborted);
@@ -377,9 +375,9 @@ export default ({
         if (state.currentStep !== -1 && state.ctx && !state.ctx.error) {
           const error = new Error('Socket Close Error');
           state.ctx.error = error;
-          emitSocketClose(error);
+          doSocketClose(error);
         } else {
-          emitSocketClose(null);
+          doSocketClose(null);
         }
       },
       onError: (error) => {
@@ -389,7 +387,7 @@ export default ({
             state.ctx.error = error;
           }
         }
-        emitSocketClose(error);
+        doSocketClose(error);
       },
     },
     () => socket,
