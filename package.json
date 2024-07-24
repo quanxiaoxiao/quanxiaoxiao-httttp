@@ -1,6 +1,6 @@
 {
   "name": "@quanxiaoxiao/httttp",
-  "version": "0.40.0",
+  "version": "0.41.0",
   "type": "module",
   "scripts": {
     "test": "NODE_ENV=test node --test"
@@ -24,7 +24,7 @@
   "dependencies": {
     "@quanxiaoxiao/compare": "^0.2.2",
     "@quanxiaoxiao/datav": "^0.3.0",
-    "@quanxiaoxiao/http-request": "^0.37.0",
+    "@quanxiaoxiao/http-request": "^0.38.0",
     "@quanxiaoxiao/http-utils": "^0.19.0",
     "@quanxiaoxiao/node-utils": "^0.11.0",
     "@quanxiaoxiao/socket": "^0.9.0",
