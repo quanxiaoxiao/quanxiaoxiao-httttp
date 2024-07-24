@@ -4,6 +4,7 @@ import {
   Readable,
   Writable,
 } from 'node:stream';
+import _ from 'lodash';
 import createError from 'http-errors';
 import { createConnector } from '@quanxiaoxiao/socket';
 import {
@@ -36,7 +37,8 @@ const STEP_REQUEST_BODY = 3;
 const STEP_REQUEST_END = 4;
 const STEP_RESPONSE_WAIT = 5;
 const STEP_RESPONSE_START = 6;
-const STEP_RESPONSE_END = 8;
+const STEP_RESPONSE_ERROR = 91;
+// const STEP_RESPONSE_END = 8;
 
 export default ({
   socket,
@@ -104,7 +106,8 @@ export default ({
   };
 
   const doResponseError = (ctx) => {
-    if (!controller.signal.aborted) {
+    if (!controller.signal.aborted && state.currentStep !== STEP_RESPONSE_ERROR) {
+      state.currentStep = STEP_RESPONSE_ERROR;
       attachResponseError(ctx);
       if (onHttpError) {
         onHttpError(ctx);
@@ -112,7 +115,10 @@ export default ({
         console.warn(ctx.error);
       }
       try {
-        state.connector.end(encodeHttp(ctx.response));
+        const chunk = encodeHttp(ctx.response);
+        const size = chunk.length;
+        state.connector.end(chunk);
+        state.bytesOutgoing += size;
       } catch (error) {
         console.warn(error);
       } finally {
@@ -134,7 +140,7 @@ export default ({
   };
 
   const doResponse = (ctx) => {
-    assert(state.currentStep !== STEP_RESPONSE_START);
+    assert(state.currentStep < STEP_RESPONSE_START);
     state.currentStep = STEP_RESPONSE_START;
     assert(ctx.error == null);
     if (ctx.response && ctx.response.body instanceof Readable) {
@@ -182,6 +188,7 @@ export default ({
     assert(ctx.error == null);
     if (state.currentStep === STEP_REQUEST_END) {
       if (onHttpResponse) {
+        state.currentStep = STEP_RESPONSE_WAIT;
         promisess(onHttpResponse, ctx)
           .then(
             () => {
@@ -227,12 +234,12 @@ export default ({
         ctx.request.query = query;
         if (onHttpRequestStartLine) {
           await onHttpRequestStartLine(ctx);
+          assert(ctx.response == null);
           assert(!controller.signal.aborted);
         }
       },
       onHeader: async (ret) => {
         assert(state.currentStep === STEP_REQUEST_START_LINE);
-        assert(ctx.response == null);
         state.currentStep = STEP_REQUEST_HEADER;
         ctx.request.headersRaw = ret.headersRaw;
         ctx.request.headers = ret.headers;
@@ -270,6 +277,23 @@ export default ({
           ctx.request.body = null;
         }
         if (ctx.response) {
+          assert(_.isPlainObject(ctx.response));
+          state.currentStep = STEP_RESPONSE_WAIT;
+          if (onHttpResponse) {
+            promisess(onHttpResponse, ctx)
+              .then(
+                () => {
+                  if (!controller.signal.aborted) {
+                    doResponse(ctx);
+                  }
+                },
+                (error) => {
+                  handleHttpError(error, ctx);
+                },
+              );
+          } else {
+            doResponse(ctx);
+          }
         }
       },
       onBody: (chunk) => {
@@ -280,8 +304,10 @@ export default ({
             state.currentStep = STEP_REQUEST_BODY;
           }
         }
-        assert(ctx.request._write);
         ctx.request._write(chunk);
+        if (state.currentStep >= STEP_REQUEST_END) {
+          state.connector.pause();
+        }
       },
       onEnd: async () => {
         if (state.currentStep < STEP_REQUEST_END) {
