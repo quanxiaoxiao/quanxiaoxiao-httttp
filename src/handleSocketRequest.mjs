@@ -18,6 +18,18 @@ import {
   wrapStreamWrite,
   wrapStreamRead,
 } from '@quanxiaoxiao/node-utils';
+import {
+  HTTP_STEP_EMPTY,
+  HTTP_STEP_REQUEST_START,
+  HTTP_STEP_REQUEST_START_LINE,
+  HTTP_STEP_REQUEST_HEADER,
+  HTTP_STEP_REQUEST_BODY,
+  HTTP_STEP_REQUEST_END,
+  HTTP_STEP_RESPONSE_WAIT,
+  HTTP_STEP_RESPONSE_START,
+  HTTP_STEP_RESPONSE_END,
+  HTTP_STEP_RESPONSE_ERROR,
+} from './constants.mjs';
 import attachResponseError from './attachResponseError.mjs';
 import generateResponse from './generateResponse.mjs';
 import generateRequestContext from './generateRequestContext.mjs';
@@ -28,17 +40,6 @@ const promisess = async (fn, ...args) => {
   const ret = await fn(...args);
   return ret;
 };
-
-const STEP_EMPTY = -1;
-const STEP_REQUEST_START = 0;
-const STEP_REQUEST_START_LINE = 1;
-const STEP_REQUEST_HEADER = 2;
-const STEP_REQUEST_BODY = 3;
-const STEP_REQUEST_END = 4;
-const STEP_RESPONSE_WAIT = 5;
-const STEP_RESPONSE_START = 6;
-const STEP_RESPONSE_END = 10;
-const STEP_RESPONSE_ERROR = 91;
 
 export default ({
   socket,
@@ -60,10 +61,11 @@ export default ({
     isSocketCloseEmit: false,
     dateTimeCreate: Date.now(),
     timeOnStart: performance.now(),
+    timeOnLastIncoming: null,
     bytesIncoming: 0,
     bytesOutgoing: 0,
     count: 0,
-    currentStep: STEP_EMPTY,
+    currentStep: HTTP_STEP_EMPTY,
     execute: null,
     connector: null,
   };
@@ -97,8 +99,8 @@ export default ({
 
   const doResponseEnd = () => {
     assert(state.ctx != null);
-    assert(state.currentStep < STEP_RESPONSE_END);
-    state.currentStep = STEP_RESPONSE_END;
+    assert(state.currentStep < HTTP_STEP_RESPONSE_END);
+    state.currentStep = HTTP_STEP_RESPONSE_END;
     if (!controller.signal.aborted) {
       state.execute = null;
       if (onHttpResponseEnd) {
@@ -112,8 +114,8 @@ export default ({
   };
 
   const doResponseError = (ctx) => {
-    if (!controller.signal.aborted && state.currentStep !== STEP_RESPONSE_ERROR) {
-      state.currentStep = STEP_RESPONSE_ERROR;
+    if (!controller.signal.aborted && state.currentStep !== HTTP_STEP_RESPONSE_ERROR) {
+      state.currentStep = HTTP_STEP_RESPONSE_ERROR;
       attachResponseError(ctx);
       if (onHttpError) {
         onHttpError(ctx);
@@ -121,7 +123,7 @@ export default ({
         console.warn(ctx.error);
       }
       try {
-        const chunk = encodeHttp(ctx.response);
+        const chunk = encodeHttp(ctx.error.response);
         const size = chunk.length;
         state.connector.end(chunk);
         state.bytesOutgoing += size;
@@ -146,8 +148,8 @@ export default ({
   };
 
   const doResponse = (ctx) => {
-    assert(state.currentStep < STEP_RESPONSE_START);
-    state.currentStep = STEP_RESPONSE_START;
+    assert(state.currentStep < HTTP_STEP_RESPONSE_START);
+    state.currentStep = HTTP_STEP_RESPONSE_START;
     assert(ctx.error == null);
     if (ctx.response && ctx.response.body instanceof Readable) {
       assert(!Object.hasOwnProperty.call(ctx.response, 'data'));
@@ -192,9 +194,9 @@ export default ({
   const doHttpRequestComplete = (ctx) => {
     assert(!controller.signal.aborted);
     assert(ctx.error == null);
-    if (state.currentStep === STEP_REQUEST_END) {
+    if (state.currentStep === HTTP_STEP_REQUEST_END) {
       if (onHttpResponse) {
-        state.currentStep = STEP_RESPONSE_WAIT;
+        state.currentStep = HTTP_STEP_RESPONSE_WAIT;
         promisess(onHttpResponse, ctx)
           .then(
             () => {
@@ -217,6 +219,7 @@ export default ({
       state.isSocketCloseEmit = true;
       onSocketClose({
         dateTimeCreate: state.dateTimeCreate,
+        dateTimeLastIncoming: state.timeOnLastIncoming == null ? null : state.dateTimeCreate + (state.timeOnLastIncoming - state.timeOnStart),
         bytesIncoming: state.bytesIncoming,
         bytesOutgoing: state.bytesOutgoing,
         count: state.count,
@@ -230,7 +233,7 @@ export default ({
     const { ctx } = state;
     state.execute = decodeHttpRequest({
       onStartLine: async (ret) => {
-        state.currentStep = STEP_REQUEST_START_LINE;
+        state.currentStep = HTTP_STEP_REQUEST_START_LINE;
         ctx.request.timeOnStartLine = calcTimeByRequest(ctx);
         ctx.request.httpVersion = ret.httpVersion;
         ctx.request.method = ret.method;
@@ -246,8 +249,8 @@ export default ({
         }
       },
       onHeader: async (ret) => {
-        assert(state.currentStep === STEP_REQUEST_START_LINE);
-        state.currentStep = STEP_REQUEST_HEADER;
+        assert(state.currentStep === HTTP_STEP_REQUEST_START_LINE);
+        state.currentStep = HTTP_STEP_REQUEST_HEADER;
         ctx.request.headersRaw = ret.headersRaw;
         ctx.request.headers = ret.headers;
         ctx.request.timeOnHeader = calcTimeByRequest(ctx);
@@ -272,7 +275,9 @@ export default ({
             },
             onError: (error) => {
               if (!controller.signal.aborted) {
-                ctx.error = new Error(`request body stream, \`${error.message}\``);
+                if (!ctx.error) {
+                  ctx.error = new Error(`request body stream, \`${error.message}\``);
+                }
                 doResponseError(ctx);
               }
             },
@@ -285,7 +290,7 @@ export default ({
         }
         if (ctx.response) {
           assert(_.isPlainObject(ctx.response));
-          state.currentStep = STEP_RESPONSE_WAIT;
+          state.currentStep = HTTP_STEP_RESPONSE_WAIT;
           if (onHttpResponse) {
             promisess(onHttpResponse, ctx)
               .then(
@@ -307,18 +312,18 @@ export default ({
         assert(!controller.signal.aborted);
         if (ctx.request.timeOnBody == null) {
           ctx.request.timeOnBody = calcTimeByRequest(ctx);
-          if (state.currentStep < STEP_REQUEST_BODY) {
-            state.currentStep = STEP_REQUEST_BODY;
+          if (state.currentStep < HTTP_STEP_REQUEST_BODY) {
+            state.currentStep = HTTP_STEP_REQUEST_BODY;
           }
         }
         ctx.request._write(chunk);
-        if (state.currentStep >= STEP_REQUEST_END) {
+        if (state.currentStep >= HTTP_STEP_REQUEST_END) {
           state.connector.pause();
         }
       },
       onEnd: async () => {
-        if (state.currentStep < STEP_REQUEST_END) {
-          state.currentStep = STEP_REQUEST_END;
+        if (state.currentStep < HTTP_STEP_REQUEST_END) {
+          state.currentStep = HTTP_STEP_REQUEST_END;
         }
         ctx.request.timeOnEnd = calcTimeByRequest(ctx);
         if (ctx.request.timeOnBody == null) {
@@ -339,14 +344,15 @@ export default ({
 
   const handleDataOnSocket = (chunk) => {
     assert(!controller.signal.aborted);
+    state.timeOnLastIncoming = performance.now();
     const size = chunk.length;
     state.bytesIncoming += size;
-    if (state.currentStep === STEP_EMPTY || state.currentStep === STEP_RESPONSE_END) {
+    if (state.currentStep === HTTP_STEP_EMPTY || state.currentStep === HTTP_STEP_RESPONSE_END) {
       assert(state.execute == null);
-      if (state.currentStep === STEP_EMPTY) {
+      if (state.currentStep === HTTP_STEP_EMPTY) {
         assert(state.ctx === null);
       }
-      state.currentStep = STEP_REQUEST_START;
+      state.currentStep = HTTP_STEP_REQUEST_START;
       state.count += 1;
       state.ctx = generateRequestContext();
       state.ctx.socket = socket;
@@ -424,7 +430,7 @@ export default ({
       onClose: () => {
         assert(!controller.signal.aborted);
         controller.abort();
-        if (state.currentStep !== STEP_RESPONSE_END && state.currentStep !== STEP_EMPTY) {
+        if (state.currentStep !== HTTP_STEP_RESPONSE_END && state.currentStep !== HTTP_STEP_EMPTY) {
           const error = new Error('Socket Close Error');
           if (!state.ctx.error) {
             state.ctx.error = error;

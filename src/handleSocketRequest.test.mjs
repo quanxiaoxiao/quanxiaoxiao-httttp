@@ -250,7 +250,7 @@ test('handleSocketRequest request.body set invalid', async () => {
   const onHttpRequestEnd = mock.fn(() => {});
   const onHttpResponse = mock.fn(() => {});
   const onHttpError = mock.fn((ctx) => {
-    assert.equal(ctx.response.statusCode, 500);
+    assert.equal(ctx.error.response.statusCode, 500);
   });
   const server = net.createServer((socket) => {
     handleSocketRequest({
@@ -672,7 +672,7 @@ test('handleSocketRequest request chunk invalid 2', async () => {
   const port = getPort();
   const onHttpResponseEnd = mock.fn(() => {});
   const onHttpError = mock.fn((ctx) => {
-    assert.equal(ctx.response.statusCode, 400);
+    assert.equal(ctx.error.response.statusCode, 400);
   });
   const onHttpRequest = mock.fn(() => {});
   const onHttpRequestStartLine = mock.fn(() => {});
@@ -720,7 +720,7 @@ test('handleSocketRequest request chunk invalid 2', async () => {
 
 test('handleSocketRequest onHttpRequestStartLine trigger error', async () => {
   const onHttpError = mock.fn((ctx) => {
-    assert.equal(ctx.response.statusCode, 500);
+    assert.equal(ctx.error.response.statusCode, 500);
     assert.equal(ctx.error.message, 'xxx');
   });
   const onHttpRequestHeader = mock.fn(() => {});

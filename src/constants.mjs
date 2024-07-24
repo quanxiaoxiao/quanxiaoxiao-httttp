@@ -1,0 +1,10 @@
+export const HTTP_STEP_EMPTY = -1;
+export const HTTP_STEP_REQUEST_START = 0;
+export const HTTP_STEP_REQUEST_START_LINE = 1;
+export const HTTP_STEP_REQUEST_HEADER = 2;
+export const HTTP_STEP_REQUEST_BODY = 3;
+export const HTTP_STEP_REQUEST_END = 4;
+export const HTTP_STEP_RESPONSE_WAIT = 5;
+export const HTTP_STEP_RESPONSE_START = 6;
+export const HTTP_STEP_RESPONSE_END = 10;
+export const HTTP_STEP_RESPONSE_ERROR = 91;

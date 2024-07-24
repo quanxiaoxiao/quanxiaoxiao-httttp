@@ -4,24 +4,25 @@ import { STATUS_CODES } from 'node:http';
 
 export default (ctx) => {
   assert(ctx.error instanceof Error);
-  ctx.response = {
+  const response = {
     statusCode: ctx.error.statusCode,
     body: null,
   };
-  if (ctx.response.statusCode == null) {
-    ctx.response.statusCode = 500;
+  if (response.statusCode == null) {
+    response.statusCode = 500;
   }
-  if (ctx.response.statusCode >= 400
-    && ctx.response.statusCode <= 499
+  if (response.statusCode >= 400
+    && response.statusCode <= 499
     && ctx.error.message
   ) {
-    ctx.response.body = ctx.error.message;
+    response.body = ctx.error.message;
   }
-  assert(ctx.response.statusCode >= 0 && ctx.response.statusCode <= 999);
-  if (STATUS_CODES[ctx.response.statusCode]) {
-    ctx.response.statusText = STATUS_CODES[ctx.response.statusCode];
-    if (!ctx.response.body) {
-      ctx.response.body = ctx.response.statusText;
+  assert(response.statusCode >= 0 && response.statusCode <= 999);
+  if (STATUS_CODES[response.statusCode]) {
+    response.statusText = STATUS_CODES[response.statusCode];
+    if (!response.body) {
+      response.body = response.statusText;
     }
   }
+  ctx.error.response = response;
 };

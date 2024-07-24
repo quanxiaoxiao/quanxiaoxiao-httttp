@@ -26,26 +26,25 @@ test('attachResponseError', () => {
   const error = new Error();
   ctx.error = error;
   attachResponseError(ctx);
-  assert.equal(ctx.response.statusCode, 500);
-  assert.equal(ctx.response.statusText, STATUS_CODES[500]);
+  assert.equal(ctx.error.response.statusCode, 500);
+  assert.equal(ctx.error.response.statusText, STATUS_CODES[500]);
 
   ctx.error = createError(404, 'test not found');
-  ctx.response.body = 'aaaaaaa';
   attachResponseError(ctx);
-  assert.equal(ctx.response.statusCode, 404);
-  assert.equal(ctx.response.statusText, STATUS_CODES[404]);
-  assert.equal(ctx.response.body, 'test not found');
+  assert.equal(ctx.error.response.statusCode, 404);
+  assert.equal(ctx.error.response.statusText, STATUS_CODES[404]);
+  assert.equal(ctx.error.response.body, 'test not found');
 
   ctx.error = new Error();
   ctx.error.code = 'ECONNRESET';
   attachResponseError(ctx);
-  assert.equal(ctx.response.statusCode, 500);
+  assert.equal(ctx.error.response.statusCode, 500);
 
   ctx.error = createError(503);
   attachResponseError(ctx);
-  assert.equal(ctx.response.statusCode, 503);
+  assert.equal(ctx.error.response.statusCode, 503);
 
   ctx.error = createError(405);
   attachResponseError(ctx);
-  assert.equal(ctx.response.statusCode, 405);
+  assert.equal(ctx.error.response.statusCode, 405);
 });
