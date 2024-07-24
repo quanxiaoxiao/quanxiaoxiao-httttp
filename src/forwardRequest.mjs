@@ -6,19 +6,11 @@ import request, { getSocketConnect } from '@quanxiaoxiao/http-request';
 
 export default async (
   ctx,
-  {
-    hostname,
-    port,
-    method,
-    pathname,
-    querystring,
-    headers,
-    body,
-  },
+  options,
 ) => {
   const socket = getSocketConnect({
-    hostname,
-    port,
+    hostname: options.hostname,
+    port: options.port,
   });
   try {
      await waitConnect(
@@ -43,10 +35,9 @@ export default async (
   };
 
   const requestForwardOptions = {
-    method,
-    path: pathname,
-    headers,
-    body,
+    method: options.method,
+    path: options.pathname,
+    headers: options.headers,
   };
 
   if (requestForwardOptions.method == null) {
@@ -56,8 +47,8 @@ export default async (
     requestForwardOptions.path = ctx.request.pathname;
   }
 
-  if (querystring) {
-    requestForwardOptions.path = `${requestForwardOptions.path}?${querystring}`;
+  if (options.querystring) {
+    requestForwardOptions.path = `${requestForwardOptions.path}?${options.querystring}`;
   } else if (ctx.request.querystring) {
     requestForwardOptions.path = `${requestForwardOptions.path}?${ctx.request.querystring}`;
   }
@@ -66,10 +57,16 @@ export default async (
     requestForwardOptions.headers = [
       ...filterHeaders(ctx.request.headersRaw, ['host', 'content-length', 'transform-encoding']),
       'Host',
-      `${hostname}:${port}`,
+      `${options.hostname}:${options.port}`,
     ];
   } else {
-    requestForwardOptions.headers['Host'] = `${hostname}:${port}`;
+    requestForwardOptions.headers['Host'] = `${options.hostname}:${options.port}`;
+  }
+
+  if (Object.hasOwnProperty.call(options, 'body')) {
+    requestForwardOptions.body = options.body;
+  } else {
+    requestForwardOptions.body = ctx.request.body;
   }
 
   request(
