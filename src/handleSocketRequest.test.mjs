@@ -1531,3 +1531,75 @@ test('handleSocketRequest before ctx.request.body end response data 2',  async (
   await waitFor(100);
   server.close();
 });
+
+test('handleSocketRequest request 2 1', async () => {
+  const port = getPort();
+
+  const handleDataOnSocket = mock.fn(() => {});
+
+  const onHttpResponse = mock.fn((ctx) => {
+    if (onHttpResponse.mock.calls.length === 0) {
+      ctx.response = {
+        headers: {
+          Server: 'quan',
+        },
+        body: 'aaa',
+      };
+    } else  {
+      ctx.response = {
+        headers: {
+          Server: 'quan',
+        },
+        body: 'bbb',
+      };
+    }
+  });
+  const onHttpResponseEnd = mock.fn(() => {});
+  const onSocketClose = mock.fn((state) => {
+    assert.equal(state.error, null);
+    assert.equal(state.count, 2);
+    assert(state.bytesIncoming > 0);
+    assert(state.bytesOutgoing > 0);
+  });
+
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpResponse,
+      onHttpResponseEnd,
+      onSocketClose,
+    });
+  });
+
+  server.listen(port);
+
+  await waitFor(100);
+  const socket = getSocketConnect({ port });
+  socket.on('data', handleDataOnSocket);
+  await waitFor(100);
+  socket.write('GET /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 0\r\n\r\n');
+  await waitFor(200);
+  assert.equal(onHttpResponse.mock.calls.length, 1);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 1);
+  await waitFor(100);
+  socket.write('GET /bbbb HTTP/1.1\r\nName: rice\r\nContent-Length: 0\r\n\r\n');
+  await waitFor(100);
+  assert.equal(onHttpResponse.mock.calls.length, 2);
+  assert.equal(onHttpResponseEnd.mock.calls.length, 2);
+  await waitFor(100);
+  assert.equal(handleDataOnSocket.mock.calls.length, 2);
+  assert.equal(
+    handleDataOnSocket.mock.calls[0].arguments[0].toString(),
+    'HTTP/1.1 200 OK\r\nServer: quan\r\nContent-Length: 3\r\n\r\naaa',
+  );
+  assert.equal(
+    handleDataOnSocket.mock.calls[1].arguments[0].toString(),
+    'HTTP/1.1 200 OK\r\nServer: quan\r\nContent-Length: 3\r\n\r\nbbb',
+  );
+  assert.equal(onSocketClose.mock.calls.length, 0);
+  assert(!socket.destroyed);
+  socket.destroy();
+  await waitFor(100);
+  assert.equal(onSocketClose.mock.calls.length, 1);
+  server.close();
+});

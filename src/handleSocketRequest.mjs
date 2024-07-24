@@ -72,7 +72,13 @@ export default ({
     const size = chunk.length;
     if (!controller.signal.aborted && size > 0) {
       if (onChunkOutgoing) {
-        onChunkOutgoing(ctx, chunk);
+        promisess(onChunkOutgoing, ctx, chunk)
+          .then(
+            () => {},
+            (error) => {
+              console.error(error);
+            },
+          );
       }
       try {
         const ret = state.connector.write(chunk);
@@ -91,8 +97,9 @@ export default ({
 
   const doResponseEnd = () => {
     assert(state.ctx != null);
+    assert(state.currentStep < STEP_RESPONSE_END);
+    state.currentStep = STEP_RESPONSE_END;
     if (!controller.signal.aborted) {
-      state.currentStep = STEP_RESPONSE_END;
       state.execute = null;
       if (onHttpResponseEnd) {
         try {
@@ -206,7 +213,7 @@ export default ({
   };
 
   const doSocketClose = (error) => {
-    if (onSocketClose && state.isSocketCloseEmit) {
+    if (onSocketClose && !state.isSocketCloseEmit) {
       state.isSocketCloseEmit = true;
       onSocketClose({
         dateTimeCreate: state.dateTimeCreate,
@@ -219,7 +226,8 @@ export default ({
     }
   };
 
-  const bindExcute = (ctx) => {
+  const bindExcute = () => {
+    const { ctx } = state;
     state.execute = decodeHttpRequest({
       onStartLine: async (ret) => {
         state.currentStep = STEP_REQUEST_START_LINE;
@@ -334,6 +342,10 @@ export default ({
     const size = chunk.length;
     state.bytesIncoming += size;
     if (state.currentStep === STEP_EMPTY || state.currentStep === STEP_RESPONSE_END) {
+      assert(state.execute == null);
+      if (state.currentStep === STEP_EMPTY) {
+        assert(state.ctx === null);
+      }
       state.currentStep = STEP_REQUEST_START;
       state.count += 1;
       state.ctx = generateRequestContext();
@@ -349,11 +361,17 @@ export default ({
           remoteAddress,
         });
       }
-      bindExcute(state.ctx);
+      bindExcute();
     }
     if (size > 0) {
       if (onChunkIncoming) {
-        onChunkIncoming(state.ctx, chunk);
+        promisess(onChunkIncoming, state.ctx, chunk)
+          .then(
+            () => {},
+            (error) => {
+              console.error(error);
+            },
+          );
       }
       state.execute(chunk)
         .then(

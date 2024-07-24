@@ -47,11 +47,10 @@ export default (routeMatchList, logger) => ({
       assert(ctx.response.promise && typeof ctx.response.promise.then === 'function');
       await ctx.response.promise();
     } else if (ctx.requestHandler.validate) {
-      const data = decodeContentToJSON(ctx.request.dataBuf, ctx.request.headers);
-      if (!ctx.requestHandler.validate(data)) {
+      ctx.request.data = decodeContentToJSON(ctx.request.dataBuf, ctx.request.headers);
+      if (!ctx.requestHandler.validate(ctx.request.data)) {
         throw createError(400, JSON.stringify(ctx.requestHandler.validate.errors));
       }
-      ctx.request.data = data;
     }
     await ctx.requestHandler.fn(ctx);
     if (!ctx.response) {
