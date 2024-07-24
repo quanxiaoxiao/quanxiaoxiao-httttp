@@ -151,7 +151,10 @@ export default ({
     assert(state.currentStep < HTTP_STEP_RESPONSE_START);
     state.currentStep = HTTP_STEP_RESPONSE_START;
     assert(ctx.error == null);
-    if (ctx.response && ctx.response.body instanceof Readable) {
+    if (ctx.response
+      && ctx.response.body instanceof Readable
+      && ctx.response.body.readable
+    ) {
       assert(!Object.hasOwnProperty.call(ctx.response, 'data'));
       const encodeHttpResponse = encodeHttp({
         statusCode: ctx.response.statusCode,
@@ -177,8 +180,14 @@ export default ({
               }
             },
           });
-        } else if (!ctx.response.body.destroyed) {
-          ctx.response.body.destroy();
+        } else {
+          if (!controller.signal.aborted) {
+            state.connector();
+            controller.abort();
+          }
+          if (!ctx.response.body.destroyed) {
+            ctx.response.body.destroy();
+          }
         }
       });
     } else {
