@@ -100,8 +100,8 @@ export default ({
   const doResponseEnd = () => {
     assert(state.ctx != null);
     assert(state.currentStep < HTTP_STEP_RESPONSE_END);
-    state.currentStep = HTTP_STEP_RESPONSE_END;
     if (!controller.signal.aborted) {
+      state.currentStep = HTTP_STEP_RESPONSE_END;
       state.execute = null;
       if (onHttpResponseEnd) {
         try {

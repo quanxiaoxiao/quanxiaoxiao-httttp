@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream';
 import createError from 'http-errors';
-import { filterHeaders } from '@quanxiaoxiao/http-utils';
+import { filterHeaders,   hasHttpBodyContent } from '@quanxiaoxiao/http-utils';
 import { waitConnect } from '@quanxiaoxiao/socket';
 import request, { getSocketConnect } from '@quanxiaoxiao/http-request';
 
@@ -65,7 +65,8 @@ export default async (
 
   if (Object.hasOwnProperty.call(options, 'body')) {
     requestForwardOptions.body = options.body;
-  } else {
+  } else if (hasHttpBodyContent(ctx.request.headers)) {
+    ctx.request.body = new PassThrough();
     requestForwardOptions.body = ctx.request.body;
   }
 
