@@ -45,10 +45,13 @@ export default (routeMatchList, logger) => ({
   onHttpResponse: async (ctx) => {
     if (ctx.response) {
       await new Promise((resolve) => {
-        ctx.response.promise = () => {
+        ctx.response._promise = () => {
           resolve();
         };
       });
+      if (ctx.error) {
+        throw createError(500);
+      }
     } else if (ctx.requestHandler.validate) {
       ctx.request.data = decodeContentToJSON(ctx.request.dataBuf, ctx.request.headers);
       if (!ctx.requestHandler.validate(ctx.request.data)) {

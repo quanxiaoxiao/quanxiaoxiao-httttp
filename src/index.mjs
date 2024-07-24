@@ -4,10 +4,12 @@ import parseHtml from './parseHtml.mjs';
 import generateHtmlTag from './generateHtmlTag.mjs';
 import generateRouteMatchList from './generateRouteMatchList.mjs';
 import createHttpRequestHandler from './createHttpRequestHandler.mjs';
+import forwardRequest from './forwardRequest.mjs';
 import * as constants from './constants.mjs';
 
 export {
   constants,
+  forwardRequest,
   generateRouteMatchList,
   handleSocketRequest,
   createHttpRequestHandler,
