@@ -266,6 +266,10 @@ export default ({
         }
         assert(ctx.request._write);
         ctx.request._write(chunk);
+        if (ctx.response && ctx.response.statusCode != null) {
+          assert(ctx.response.statusCode > 0 && ctx.response.statusCode < 1000);
+          state.connector.pause();
+        }
       },
       onEnd: async () => {
         assert(state.currentStep < 4);
@@ -298,7 +302,14 @@ export default ({
       state.ctx.socket = socket;
       state.ctx.signal = controller.signal;
       if (onHttpRequest) {
-        onHttpRequest(state.ctx);
+        const { remoteAddress } = socket;
+        onHttpRequest({
+          dateTimeCreate: state.dateTimeCreate,
+          bytesIncoming: state.bytesIncoming,
+          bytesOutgoing: state.bytesOutgoing,
+          count: state.count,
+          remoteAddress,
+        });
       }
       bindExcute(state.ctx);
     }
