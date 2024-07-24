@@ -73,14 +73,14 @@ export default (routeMatchList, logger) => ({
     }
   },
   onHttpError: (ctx) => {
-    assert(!!ctx.error);
-    const message = `$$${ctx.request.method} ${ctx.request.path} ${ctx.response.statusCode} ${ctx.error.message}`;
+    assert(ctx.error && ctx.error.response);
+    const message = `$$${ctx.request.method} ${ctx.request.path} ${ctx.error.response.statusCode} ${ctx.error.message}`;
     if (logger) {
       logger.warn(message);
     } else {
       console.log(message);
     }
-    if (ctx.response.statusCode >= 500 && ctx.response.statusCode <= 599) {
+    if (ctx.error.response.statusCode >= 500 && ctx.error.response.statusCode <= 599) {
       console.error(ctx.error);
     }
   },
