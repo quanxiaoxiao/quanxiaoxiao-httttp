@@ -1,5 +1,4 @@
 import assert from 'node:assert';
-import { EventEmitter } from 'node:events';
 import {
   PassThrough,
   Readable,
@@ -43,8 +42,6 @@ export default ({
   onSocketClose,
 }) => {
   const controller = new AbortController();
-
-  const emitter = new EventEmitter();
 
   const state = {
     ctx: null,
@@ -168,17 +165,10 @@ export default ({
     }
   };
 
-  emitter.on('httpRequestComplete', (ctx) => {
-    if (!controller.signal.aborted && ctx.error == null) {
-      if (!ctx.response || ctx.response.statusCode == null) {
-        emitter.emit('httpResponse', ctx);
-      }
-    }
-  });
-
-  emitter.on('httpResponse', async (ctx) => {
+  const doHttpRequestComplete = (ctx) => {
+    assert(!controller.signal.aborted);
     assert(ctx.error == null);
-    if (!controller.signal.aborted) {
+    if (!ctx.response || ctx.response.statusCode == null) {
       if (onHttpResponse) {
         promisess(onHttpResponse, ctx)
           .then(
@@ -195,7 +185,7 @@ export default ({
         doResponse(ctx);
       }
     }
-  });
+  };
 
   const doSocketClose = (error) => {
     if (onSocketClose && state.isSocketCloseEmit) {
@@ -260,7 +250,7 @@ export default ({
               }
             },
             onEnd: () => {
-              emitter.emit('httpRequestComplete', ctx);
+              doHttpRequestComplete(ctx);
             },
           });
         } else if (ctx.request.body != null) {
@@ -291,7 +281,7 @@ export default ({
         if (ctx.request._write) {
           ctx.request._write();
         } else {
-          emitter.emit('httpRequestComplete', ctx);
+          doHttpRequestComplete(ctx);
         }
       },
     });
@@ -343,7 +333,6 @@ export default ({
       state.ctx = generateRequestContext();
       state.ctx.socket = socket;
       state.ctx.signal = controller.signal;
-      state.ctx.emitter = emitter;
       if (onHttpRequest) {
         onHttpRequest(state.ctx);
       }
@@ -392,6 +381,4 @@ export default ({
     },
     () => socket,
   );
-
-  return emitter;
 };
