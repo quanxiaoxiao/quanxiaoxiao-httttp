@@ -1444,3 +1444,90 @@ test('handleSocketRequest response.body stream 222', async () => {
   assert.equal(handleDataOnSocket.mock.calls.length, 2);
   server.close();
 });
+
+test('handleSocketRequest before ctx.request.body end response data 1',  async () => {
+  const port = getPort();
+
+  const handleDataOnSocket = mock.fn(() => {});
+
+  const onHttpRequestEnd = mock.fn(() => {});
+  const onHttpResponse = mock.fn(() => {});
+
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpRequestHeader: (ctx) => {
+        ctx.response = {
+          headers: {
+            Server: 'quan',
+          },
+          body: 'xxx',
+        };
+      },
+      onHttpResponse,
+      onHttpRequestEnd,
+    });
+  });
+
+  server.listen(port);
+
+  await waitFor(100);
+  const socket = getSocketConnect({ port });
+  socket.on('data', handleDataOnSocket);
+  await waitFor(200);
+  socket.write('POST /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 6\r\n\r\naaa');
+  await waitFor(500);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 0);
+  assert.equal(onHttpResponse.mock.calls.length, 1);
+  assert.equal(handleDataOnSocket.mock.calls.length, 1);
+  assert.equal(handleDataOnSocket.mock.calls[0].arguments[0].toString(), 'HTTP/1.1 200 OK\r\nServer: quan\r\nContent-Length: 3\r\n\r\nxxx');
+  assert(!socket.destroyed);
+  socket.write('efd');
+  await waitFor(200);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 0);
+  assert(!socket.destroyed);
+  socket.destroy();
+  await waitFor(100);
+  server.close();
+});
+
+test('handleSocketRequest before ctx.request.body end response data 2',  async () => {
+  const port = getPort();
+
+  const handleDataOnSocket = mock.fn(() => {});
+
+  const onHttpRequestEnd = mock.fn(() => {});
+  const onHttpResponse = mock.fn(() => {
+    assert.equal(onHttpRequestEnd.mock.calls.length, 0);
+  });
+
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpRequestHeader: (ctx) => {
+        ctx.response = {
+          headers: {
+            Server: 'quan',
+          },
+          body: 'xxx',
+        };
+      },
+      onHttpResponse,
+      onHttpRequestEnd,
+    });
+  });
+
+  server.listen(port);
+
+  await waitFor(100);
+  const socket = getSocketConnect({ port });
+  socket.on('data', handleDataOnSocket);
+  await waitFor(200);
+  socket.write('GET /aaa HTTP/1.1\r\nName: quan\r\nContent-Length: 0\r\n\r\n');
+  await waitFor(500);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 1);
+  assert.equal(onHttpResponse.mock.calls.length, 1);
+  socket.destroy();
+  await waitFor(100);
+  server.close();
+});

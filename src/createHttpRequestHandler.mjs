@@ -43,7 +43,10 @@ export default (routeMatchList, logger) => ({
     }
   },
   onHttpResponse: async (ctx) => {
-    if (ctx.requestHandler.validate) {
+    if (ctx.response) {
+      assert(ctx.response.promise && typeof ctx.response.promise.then === 'function');
+      await ctx.response.promise();
+    } else if (ctx.requestHandler.validate) {
       const data = decodeContentToJSON(ctx.request.dataBuf, ctx.request.headers);
       if (!ctx.requestHandler.validate(data)) {
         throw createError(400, JSON.stringify(ctx.requestHandler.validate.errors));
@@ -51,6 +54,10 @@ export default (routeMatchList, logger) => ({
       ctx.request.data = data;
     }
     await ctx.requestHandler.fn(ctx);
+    if (!ctx.response) {
+      console.warn(`${ctx.request.method} ${ctx.request.path} ctx.response unconfig`);
+      throw createError(503);
+    }
     if (ctx.routeMatched.select && !(ctx.response.body instanceof Readable)) {
       ctx.response.data = ctx.routeMatched.select(ctx.response.data);
     }

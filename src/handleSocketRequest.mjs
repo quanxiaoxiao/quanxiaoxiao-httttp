@@ -37,8 +37,8 @@ const STEP_REQUEST_BODY = 3;
 const STEP_REQUEST_END = 4;
 const STEP_RESPONSE_WAIT = 5;
 const STEP_RESPONSE_START = 6;
+const STEP_RESPONSE_END = 10;
 const STEP_RESPONSE_ERROR = 91;
-// const STEP_RESPONSE_END = 8;
 
 export default ({
   socket,
@@ -93,7 +93,7 @@ export default ({
     assert(state.ctx != null);
     if (!controller.signal.aborted) {
       const { ctx } = state;
-      state.currentStep = STEP_EMPTY;
+      state.currentStep = STEP_RESPONSE_END;
       state.ctx = null;
       if (onHttpResponseEnd) {
         try {
@@ -407,7 +407,9 @@ export default ({
       onClose: () => {
         assert(!controller.signal.aborted);
         controller.abort();
-        if (state.currentStep !== STEP_EMPTY && state.ctx && !state.ctx.error) {
+        if (state.currentStep !== STEP_RESPONSE_END
+          && state.currentStep !== STEP_RESPONSE_END
+          && state.ctx && !state.ctx.error) {
           const error = new Error('Socket Close Error');
           state.ctx.error = error;
           doSocketClose(error);
