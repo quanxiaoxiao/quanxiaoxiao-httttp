@@ -12,13 +12,38 @@ test('generateResponse', () => {
   });
   assert.throws(() => {
     const ctx = {
-      body: new PassThrough(),
+      response: {
+        body: new PassThrough(),
+      },
     };
     generateResponse(ctx);
   });
   assert.throws(() => {
     const ctx = {
-      body: 22,
+      response: {
+        body: new PassThrough(),
+        data: {
+          name: 'quan',
+        },
+      },
+    };
+    generateResponse(ctx);
+  });
+  assert.throws(() => {
+    const pass = new PassThrough();
+    const ctx = {
+      response: {
+        body: pass,
+      },
+    };
+    pass.destroy();
+    generateResponse(ctx);
+  });
+  assert.throws(() => {
+    const ctx = {
+      response: {
+        body: 22,
+      },
     };
     generateResponse(ctx);
   });
@@ -98,5 +123,28 @@ test('generateResponse gzip', () => {
   assert.deepEqual(
     ctx.response.data,
     JSON.parse(zlib.unzipSync(response.body).toString()),
+  );
+});
+
+test('generateResponse data', () => {
+  const pass = new PassThrough();
+  const ctx = {
+    request: {},
+    response: {
+      body: pass,
+      data: {
+        name: 'quan',
+      },
+    },
+  };
+  pass.destroy();
+  const response = generateResponse(ctx);
+  assert.equal(response.statusCode, 200);
+  assert(response.headers.includes('application/json'));
+  assert.deepEqual(
+    {
+      name: 'quan',
+    },
+    ctx.response.data,
   );
 });

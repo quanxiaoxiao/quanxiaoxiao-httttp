@@ -1,4 +1,5 @@
 import { PassThrough } from 'node:stream';
+import assert from 'node:assert';
 import createError from 'http-errors';
 import { filterHeaders,   hasHttpBodyContent } from '@quanxiaoxiao/http-utils';
 import { waitConnect } from '@quanxiaoxiao/socket';
@@ -8,6 +9,7 @@ export default async (
   ctx,
   options,
 ) => {
+  assert(Number.isInteger(options.port) && options.port > 0 && options.port <= 65535);
   const socket = getSocketConnect({
     hostname: options.hostname,
     port: options.port,
@@ -95,7 +97,9 @@ export default async (
       (error) => {
         if (!ctx.signal.aborted && ctx.error == null) {
           ctx.error = error;
-          ctx.response._promise();
+          if (ctx.response._promise) {
+            ctx.response._promise();
+          }
         }
       },
     );

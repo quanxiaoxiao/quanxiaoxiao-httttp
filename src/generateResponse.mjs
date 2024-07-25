@@ -12,14 +12,17 @@ import {
 
 export default (ctx) => {
   if (!ctx.response) {
-    throw createError(503, '`ctx.response` is empty');
+    throw createError(503, '`ctx.response` unset');
   }
   const response = {
     statusCode: ctx.response.statusCode ?? 200,
     headers: ctx.response.headers || {},
     body: ctx.response.body ?? null,
   };
-  assert(!(ctx.response.body instanceof Readable));
+  if (ctx.response.body instanceof Readable) {
+    assert(!ctx.response.body.readable);
+    assert(Object.hasOwnProperty.call(ctx.response, 'data'));
+  }
   if (STATUS_CODES[response.statusCode]) {
     response.statusText = STATUS_CODES[response.statusCode];
   }
