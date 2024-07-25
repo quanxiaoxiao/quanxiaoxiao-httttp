@@ -8,52 +8,48 @@ export default (routes) => {
   assert(_.isPlainObject(routes));
   const routeList = generateRouteList(routes);
   const result = [];
+  const httpMethodList = ['get', 'post', 'put', 'delete'];
   for (let i = 0; i < routeList.length; i++) {
-    const d = routeList[i];
+    const item = routeList[i];
     const routeItem = {
-      match: d.match,
-      pathname: d.pathname,
-      urlMatch: d.urlMatch,
+      match: item.match,
+      pathname: item.pathname,
+      urlMatch: item.urlMatch,
+      meta: item,
     };
-    if (d.select) {
-      routeItem.select = select(d.select);
-      routeItem.select.toJSON = () => d.select;
+    if (item.select) {
+      routeItem.select = select(item.select);
+      routeItem.select.toJSON = () => item.select;
     }
-    if (!_.isEmpty(d.query)) {
+    if (!_.isEmpty(item.query)) {
       routeItem.query = select({
         type: 'object',
-        properties: d.query,
+        properties: item.query,
       });
-      routeItem.query.toJSON = () => d.query;
+      routeItem.query.toJSON = () => item.query;
     }
-    if (d.onPre) {
-      routeItem.onPre = d.onPre;
+    if (item.onPre) {
+      routeItem.onPre = item.onPre;
     }
-    if (d.onPost) {
-      routeItem.onPost = d.onPost;
+    if (item.onPost) {
+      routeItem.onPost = item.onPost;
     }
-    const httpMethodList = ['get', 'post', 'put', 'delete'];
     for (let j = 0; j < httpMethodList.length; j++) {
-      const handler = d[httpMethodList[j]];
-      const httpMethod = httpMethodList[j].toUpperCase();
+      const handler = item[httpMethodList[j]];
       if (handler) {
-        if (typeof handler === 'function') {
-          routeItem[httpMethod] = {
-            fn: handler,
-          };
-        } else {
+        const httpMethod = httpMethodList[j].toUpperCase();
+        routeItem[httpMethod] = {
+          fn: handler,
+          validate: null,
+        };
+        if (typeof handler !== 'function') {
           assert(_.isPlainObject(handler));
           assert(typeof handler.fn === 'function');
-          routeItem[httpMethod] = {
-            fn: handler.fn,
-          };
+          routeItem[httpMethod].fn = handler.fn;
           if (handler.validate) {
             const ajv = new Ajv();
             routeItem[httpMethod].validate = ajv.compile(handler.validate);
             routeItem[httpMethod].validate.toJSON = () => handler.validate;
-          }
-          if (handler.onRequestEnd) {
-            routeItem[httpMethod].onRequestEnd = handler.onRequestEnd;
           }
         }
       }
