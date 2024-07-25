@@ -272,7 +272,6 @@ export default ({
             ctx.request.body = new PassThrough();
           }
           assert(ctx.request.body instanceof Writable);
-          assert(ctx.request.body instanceof Readable);
           ctx.request._write = wrapStreamWrite({
             stream: ctx.request.body,
             signal: controller.signal,
@@ -295,6 +294,9 @@ export default ({
             },
           });
         } else if (ctx.request.body != null) {
+          if (ctx.request.body instanceof Readable && !ctx.request.body.destroyed) {
+            ctx.request.body.destroy();
+          }
           ctx.request.body = null;
         }
         if (ctx.response) {
