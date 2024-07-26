@@ -13,6 +13,7 @@ export default async (
   const socket = getSocketConnect({
     hostname: options.hostname,
     port: options.port,
+    protocol: options.protocol || 'http:',
   });
   try {
      await waitConnect(
