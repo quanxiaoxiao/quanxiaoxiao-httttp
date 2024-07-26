@@ -2,7 +2,11 @@ import _ from 'lodash';
 import cheerio from 'cheerio';
 
 export default (buf) => {
-  const $ = cheerio.load(buf);
+  const str = buf.toString();
+  if (!/<html[^>]*>/i.test(str)) {
+    return null;
+  }
+  const $ = cheerio.load(str);
   const scriptList = [];
   const styleList = [];
   const linkList = [];
