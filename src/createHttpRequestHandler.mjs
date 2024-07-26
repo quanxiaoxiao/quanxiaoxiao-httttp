@@ -4,7 +4,11 @@ import { decodeContentToJSON } from '@quanxiaoxiao/http-utils';
 import { wrapStreamRead } from '@quanxiaoxiao/node-utils';
 import createError from 'http-errors';
 
-export default (routeMatchList, logger) => ({
+export default ({
+  list: routeMatchList,
+  onRequest,
+  logger,
+}) => ({
   onHttpRequestStartLine: (ctx) => {
     const routeMatched = routeMatchList.find((routeItem) => routeItem.urlMatch(ctx.request.pathname));
     if (!routeMatched) {
@@ -18,6 +22,10 @@ export default (routeMatchList, logger) => ({
       throw createError(405);
     }
     ctx.requestHandler = requestHandler;
+    if (onRequest) {
+      await onRequest(ctx);
+      assert(!ctx.signal.aborted);
+    }
     ctx.request.params = ctx.routeMatched.urlMatch(ctx.request.pathname).params;
     if (ctx.routeMatched.query) {
       ctx.request.query = ctx.routeMatched.query(ctx.request.query);
