@@ -82,6 +82,9 @@ export default async (
       ...requestForwardOptions,
       signal: ctx.signal,
       onBody: ctx.response.body,
+      onChunkIncoming: options.onChunkIncoming,
+      onChunkOutgoing: options.onChunkOutgoing,
+      onEnd: options.onEnd,
       onStartLine: (state) => {
         ctx.response.httpVersion = state.httpVersion;
         ctx.response.statusCode = state.statusCode;
