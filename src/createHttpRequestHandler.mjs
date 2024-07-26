@@ -26,37 +26,44 @@ export default ({
       await onRequest(ctx);
       assert(!ctx.signal.aborted);
     }
-    ctx.request.params = ctx.routeMatched.urlMatch(ctx.request.pathname).params;
-    if (ctx.routeMatched.query) {
-      ctx.request.query = ctx.routeMatched.query(ctx.request.query);
-    }
-    if (ctx.routeMatched.match && !ctx.routeMatched.match(ctx.request)) {
-      throw createError(400);
-    }
+    if (ctx.requestHandler === requestHandler) {
+      ctx.request.params = ctx.routeMatched.urlMatch(ctx.request.pathname).params;
+      if (ctx.routeMatched.query) {
+        ctx.request.query = ctx.routeMatched.query(ctx.request.query);
+      }
+      if (ctx.routeMatched.match && !ctx.routeMatched.match(ctx.request)) {
+        throw createError(400);
+      }
 
-    if (ctx.socket.writable && ctx.routeMatched.onPre) {
-      await ctx.routeMatched.onPre(ctx);
-      assert(!ctx.signal.aborted);
-    }
-    if (ctx.requestHandler.validate) {
-      ctx.request.body = new PassThrough();
-      ctx.request.dataBuf = Buffer.from([]);
-      wrapStreamRead({
-        signal: ctx.signal,
-        stream: ctx.request.body,
-        onData: (chunk) => {
-          ctx.request.dataBuf = Buffer.concat([ctx.request.dataBuf, chunk]);
-        },
-      });
+      if (ctx.socket.writable && ctx.routeMatched.onPre) {
+        await ctx.routeMatched.onPre(ctx);
+        assert(!ctx.signal.aborted);
+      }
+      if (ctx.requestHandler.validate) {
+        ctx.request.body = new PassThrough();
+        ctx.request.dataBuf = Buffer.from([]);
+        wrapStreamRead({
+          signal: ctx.signal,
+          stream: ctx.request.body,
+          onData: (chunk) => {
+            ctx.request.dataBuf = Buffer.concat([ctx.request.dataBuf, chunk]);
+          },
+        });
+      }
+    } else {
+      ctx.routeMatched = null;
     }
   },
   onHttpResponse: async (ctx) => {
     if (ctx.response) {
-      await new Promise((resolve) => {
-        ctx.response._promise = () => {
-          resolve();
-        };
-      });
+      if (ctx.response.promise) {
+        await new Promise((resolve) => {
+          ctx.response.promise(() => {
+            resolve();
+          });
+        });
+        assert(!ctx.signal.aborted);
+      }
       if (ctx.error) {
         throw createError(500);
       }
@@ -67,16 +74,19 @@ export default ({
       }
     }
     await ctx.requestHandler.fn(ctx);
+    assert(!ctx.signal.aborted);
     if (!ctx.response) {
       console.warn(`${ctx.request.method} ${ctx.request.path} ctx.response unconfig`);
       throw createError(503);
     }
-    if (ctx.routeMatched.select && !(ctx.response.body instanceof Readable)) {
+    if (ctx.routeMatched
+      && ctx.routeMatched.select
+      && !(ctx.response.body instanceof Readable)) {
       ctx.response.data = ctx.routeMatched.select(ctx.response.data);
     }
   },
   onHttpResponseEnd: (ctx) => {
-    if (ctx.routeMatched.onPost) {
+    if (ctx.routeMatched && ctx.routeMatched.onPost) {
       ctx.routeMatched.onPost(ctx);
     }
   },

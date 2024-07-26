@@ -72,6 +72,10 @@ export default async (
     requestForwardOptions.body = ctx.request.body;
   }
 
+  ctx.response.promise = (fn) => {
+    ctx.response._promise = fn;
+  };
+
   request(
     {
       ...requestForwardOptions,
