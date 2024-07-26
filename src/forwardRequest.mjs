@@ -58,7 +58,7 @@ export default async (
 
   if (requestForwardOptions.headers == null) {
     requestForwardOptions.headers = [
-      ...filterHeaders(ctx.request.headersRaw, ['host', 'content-length', 'transform-encoding']),
+      ...filterHeaders(ctx.request.headersRaw, ['host']),
       'Host',
       `${options.hostname}:${options.port}`,
     ];
