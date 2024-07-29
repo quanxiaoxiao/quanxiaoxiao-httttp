@@ -41,13 +41,13 @@ export default async (
     requestForwardOptions.path = ctx.request.path;
   }
 
-  if (!Object.hasOwnProperty.call(requestForwardOptions, 'headers')) {
+  if (!requestForwardOptions.headers) {
     requestForwardOptions.headers = [
       ...filterHeaders(ctx.request.headersRaw, ['host']),
       'Host',
       `${options.hostname}:${options.port}`,
     ];
-  } else if (requestForwardOptions.headers && !Object.keys(requestForwardOptions.headers).some((headerKey) => !/host/i.test(headerKey))) {
+  } else if (!Object.keys(requestForwardOptions.headers).some((headerKey) => !/host/i.test(headerKey))) {
     requestForwardOptions.headers['Host'] = `${options.hostname}:${options.port}`;
   }
 
