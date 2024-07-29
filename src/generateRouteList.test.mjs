@@ -40,4 +40,12 @@ test('generateRouteList', () => {
       },
     },
   }).length, 0);
+  assert.equal(generateRouteList({
+    '/quan': {},
+    '{/rice}?/aaa': {},
+  }).length, 2);
+  assert.equal(generateRouteList({
+    '/quan': {},
+    '{/rice/aaa': {},
+  }).length, 1);
 });

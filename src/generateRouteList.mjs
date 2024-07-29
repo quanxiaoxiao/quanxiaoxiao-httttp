@@ -9,7 +9,7 @@ export default (data) => {
   const result = [];
   for (let i = 0; i < pathnameList.length; i++) {
     const pathname = pathnameList[i];
-    if (pathname[0] !== '/') {
+    if (pathname[0] !== '/' && !/^{\/[^}]+}/.test(pathname)) {
       console.warn(`\`${pathname}\` pathname invalid`);
       continue;
     }
