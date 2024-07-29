@@ -1,60 +1,69 @@
 import assert from 'node:assert';
-import Ajv from 'ajv';
 import _ from 'lodash';
+import Ajv from 'ajv';
+import { match } from 'path-to-regexp';
+import compare from '@quanxiaoxiao/compare';
 import { select } from '@quanxiaoxiao/datav';
-import generateRouteList from './generateRouteList.mjs';
+
+const httpMethodList = ['get', 'post', 'put', 'delete'];
 
 export default (routes) => {
   assert(_.isPlainObject(routes));
-  const routeList = generateRouteList(routes);
+  const pathnameList = Object.keys(routes);
   const result = [];
-  const httpMethodList = ['get', 'post', 'put', 'delete'];
-  for (let i = 0; i < routeList.length; i++) {
-    const item = routeList[i];
-    const routeItem = {
-      match: item.match,
-      pathname: item.pathname,
-      urlMatch: item.urlMatch,
-      meta: item,
-    };
-    if (item.select) {
-      routeItem.select = select(item.select);
-      routeItem.select.toJSON = () => item.select;
+  for (let i = 0; i < pathnameList.length; i++) {
+    const pathname = pathnameList[i];
+    if (pathname[0] !== '/' && !/^{\/[^}]+}/.test(pathname)) {
+      console.warn(`\`${pathname}\` pathname invalid`);
+      continue;
     }
-    if (!_.isEmpty(item.query)) {
-      routeItem.query = select({
-        type: 'object',
-        properties: item.query,
-      });
-      routeItem.query.toJSON = () => item.query;
-    }
-    if (item.onPre) {
-      routeItem.onPre = item.onPre;
-    }
-    if (item.onPost) {
-      routeItem.onPost = item.onPost;
-    }
-    for (let j = 0; j < httpMethodList.length; j++) {
-      const handler = item[httpMethodList[j]];
-      if (handler) {
-        const httpMethod = httpMethodList[j].toUpperCase();
-        routeItem[httpMethod] = {
-          fn: handler,
-          validate: null,
-        };
-        if (typeof handler !== 'function') {
-          assert(_.isPlainObject(handler));
-          assert(typeof handler.fn === 'function');
-          routeItem[httpMethod].fn = handler.fn;
-          if (handler.validate) {
-            const ajv = new Ajv();
-            routeItem[httpMethod].validate = ajv.compile(handler.validate);
-            routeItem[httpMethod].validate.toJSON = () => handler.validate;
+    const d = routes[pathname];
+    try {
+      const routeItem = {
+        pathname,
+        urlMatch: match(pathname),
+        match: d.match ? compare(d.match) : null,
+        meta: d,
+      };
+      if (d.select) {
+        routeItem.select = select(d.select);
+      }
+      if (!_.isEmpty(d.query)) {
+        routeItem.query = select({
+          type: 'object',
+          properties: d.query,
+        });
+      }
+      if (d.onPre) {
+        routeItem.onPre = d.onPre;
+      }
+      if (d.onPost) {
+        routeItem.onPost = d.onPost;
+      }
+      for (let j = 0; j < httpMethodList.length; j++) {
+        const handler = d[httpMethodList[j]];
+        if (handler) {
+          const httpMethod = httpMethodList[j].toUpperCase();
+          routeItem[httpMethod] = {
+            fn: handler,
+            validate: null,
+          };
+          if (typeof handler !== 'function') {
+            assert(_.isPlainObject(handler));
+            assert(typeof handler.fn === 'function');
+            routeItem[httpMethod].fn = handler.fn;
+            if (handler.validate) {
+              const ajv = new Ajv();
+              routeItem[httpMethod].validate = ajv.compile(handler.validate);
+            }
           }
         }
       }
+      result.push(routeItem);
+    } catch (error) {
+      console.warn(`\`${pathname}\` parse route fail, ${error.message}`);
+      continue;
     }
-    result.push(routeItem);
   }
   return result;
 };

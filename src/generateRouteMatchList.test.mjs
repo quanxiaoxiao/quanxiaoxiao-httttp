@@ -1,36 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import generateRouteList from './generateRouteList.mjs';
+import generateRouteMatchList from './generateRouteMatchList.mjs';
 
-test('generateRouteList', () => {
+test('generateRouteMatchList', () => {
   assert.throws(() => {
-    generateRouteList([]);
+    generateRouteMatchList([]);
   });
   assert.throws(() => {
-    generateRouteList(null);
+    generateRouteMatchList(null);
   });
   assert.throws(() => {
-    generateRouteList(1);
+    generateRouteMatchList(1);
   });
   assert.throws(() => {
-    generateRouteList('');
+    generateRouteMatchList('');
   });
-  assert.equal(generateRouteList({}).length, 0);
-  assert.equal(generateRouteList({
+  assert.equal(generateRouteMatchList({}).length, 0);
+  assert.equal(generateRouteMatchList({
     '/': {},
   }).length, 1);
-  assert.equal(generateRouteList({
+  assert.equal(generateRouteMatchList({
     '/quan': {},
     'rice/aaa': {},
   }).length, 1);
-  assert.equal(generateRouteList({
+  assert.equal(generateRouteMatchList({
     '/': {
       match: {
         'query.name': 'quan',
       },
     },
   }).length, 1);
-  assert.equal(generateRouteList({
+  assert.equal(generateRouteMatchList({
     '/quan': {
       match: {
         'query.name': {
@@ -40,11 +40,11 @@ test('generateRouteList', () => {
       },
     },
   }).length, 0);
-  assert.equal(generateRouteList({
+  assert.equal(generateRouteMatchList({
     '/quan': {},
     '{/rice}?/aaa': {},
   }).length, 2);
-  assert.equal(generateRouteList({
+  assert.equal(generateRouteMatchList({
     '/quan': {},
     '{/rice/aaa': {},
   }).length, 1);
