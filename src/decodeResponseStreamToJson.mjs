@@ -5,7 +5,7 @@ import { decodeContentToJSON } from '@quanxiaoxiao/http-utils';
 export default async (ctx) => {
   assert(ctx.signal && !ctx.signal.aborted);
   assert(ctx.response && ctx.response.body);
-  assert(ctx.response.readable);
+  assert(ctx.response.body.readable);
   const data = await new Promise((resolve, reject) => {
     const bufList = [];
     wrapStreamRead({
