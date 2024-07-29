@@ -6,6 +6,7 @@ import generateRouteMatchList from './generateRouteMatchList.mjs';
 import createHttpRequestHandler from './createHttpRequestHandler.mjs';
 import forwardRequest from './forwardRequest.mjs';
 import * as constants from './constants.mjs';
+import decodeResponseStreamToJson from './decodeResponseStreamToJson.mjs';
 
 export {
   constants,
@@ -16,4 +17,5 @@ export {
   parseHtml,
   renderToHtml,
   generateHtmlTag,
+  decodeResponseStreamToJson,
 };
