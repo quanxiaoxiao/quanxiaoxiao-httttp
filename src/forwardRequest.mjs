@@ -39,7 +39,7 @@ export default async (
 
   const requestForwardOptions = {
     method: options.method,
-    path: options.pathname,
+    path: options.path,
     headers: options.headers,
   };
 
@@ -47,13 +47,7 @@ export default async (
     requestForwardOptions.method = ctx.request.method;
   }
   if (requestForwardOptions.path == null) {
-    requestForwardOptions.path = ctx.request.pathname;
-  }
-
-  if (options.querystring) {
-    requestForwardOptions.path = `${requestForwardOptions.path}?${options.querystring}`;
-  } else if (ctx.request.querystring) {
-    requestForwardOptions.path = `${requestForwardOptions.path}?${ctx.request.querystring}`;
+    requestForwardOptions.path = ctx.request.path;
   }
 
   if (requestForwardOptions.headers == null) {
@@ -82,18 +76,26 @@ export default async (
       ...requestForwardOptions,
       signal: ctx.signal,
       onBody: ctx.response.body,
+      onRequest: options.onRequest,
       onChunkIncoming: options.onChunkIncoming,
       onChunkOutgoing: options.onChunkOutgoing,
       onEnd: options.onEnd,
-      onStartLine: (state) => {
+      onStartLine: async (state) => {
         ctx.response.httpVersion = state.httpVersion;
         ctx.response.statusCode = state.statusCode;
         ctx.response.statusText = state.statusText;
+        if (options.onStartLine) {
+          await options.onStartLine(ctx);
+        }
       },
       onHeader: async (state) => {
         ctx.response.headersRaw = state.headersRaw;
         ctx.response.headers = state.headers;
-        if (ctx.response._promise) {
+        if (options.onHeader) {
+          await options.onHeader(ctx);
+          assert(!ctx.signal.aborted);
+        }
+        if (ctx.response._promise && !ctx.signal.aborted) {
           await ctx.response._promise();
         }
       },
@@ -103,8 +105,10 @@ export default async (
     .then(
       () => {},
       (error) => {
-        if (!ctx.signal.aborted && ctx.error == null) {
-          ctx.error = error;
+        if (!ctx.signal.aborted) {
+          if (ctx.error == null) {
+            ctx.error = error;
+          }
           if (ctx.response._promise) {
             ctx.response._promise();
           }
