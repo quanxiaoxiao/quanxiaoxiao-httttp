@@ -10,6 +10,7 @@ export default async (
   options,
 ) => {
   assert(Number.isInteger(options.port) && options.port > 0 && options.port <= 65535);
+  assert(ctx.response == null);
   const socket = getSocketConnect({
     hostname: options.hostname,
     port: options.port,
@@ -50,19 +51,20 @@ export default async (
     requestForwardOptions.path = ctx.request.path;
   }
 
-  if (requestForwardOptions.headers == null) {
+  if (!Object.hasOwnProperty.call(requestForwardOptions, 'headers')) {
     requestForwardOptions.headers = [
       ...filterHeaders(ctx.request.headersRaw, ['host']),
       'Host',
       `${options.hostname}:${options.port}`,
     ];
-  } else {
+  } else if (!Object.hasOwnProperty.call('Host', requestForwardOptions.headers)
+    && !Object.hasOwnProperty.call('host', requestForwardOptions.headers)) {
     requestForwardOptions.headers['Host'] = `${options.hostname}:${options.port}`;
   }
 
   if (Object.hasOwnProperty.call(options, 'body')) {
     requestForwardOptions.body = options.body;
-  } else if (hasHttpBodyContent(ctx.request.headers)) {
+  } else if (hasHttpBodyContent(ctx.request.headers) && !ctx.request.body) {
     ctx.request.body = new PassThrough();
     requestForwardOptions.body = ctx.request.body;
   }
