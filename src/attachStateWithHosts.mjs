@@ -64,6 +64,7 @@ export default (state, str) => {
           continue;
         }
         hosts[name.trim()][hostname] = {
+          ...hostItem,
           hostname: hostItem.hostname,
           port: hostItem.port,
           protocol: hostItem.protocol || 'http:',
