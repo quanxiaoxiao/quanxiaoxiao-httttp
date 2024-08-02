@@ -1,15 +1,59 @@
 import { PassThrough } from 'node:stream';
 import assert from 'node:assert';
 import createError from 'http-errors';
-import { filterHeaders,   hasHttpBodyContent } from '@quanxiaoxiao/http-utils';
+import Ajv from 'ajv';
+import {
+  filterHeaders,
+  hasHttpBodyContent,
+  convertObjectToArray,
+  getHeaderValue,
+} from '@quanxiaoxiao/http-utils';
 import { waitConnect } from '@quanxiaoxiao/socket';
 import request, { getSocketConnect } from '@quanxiaoxiao/http-request';
+
+const requestSchema = {
+  type: 'object',
+  properties: {
+    method: {
+      enum: ['GET', 'POST', 'PUT', 'DELETE'],
+    },
+    path: {
+      type: 'string',
+      pattern: '^\\/.*',
+    },
+    querystring: {
+      type: 'string',
+      nullable: true,
+    },
+    headers: {
+      type: 'object',
+    },
+    headersRaw: {
+      type: 'array',
+      items: {
+        type: 'string',
+      },
+    },
+  },
+  required: ['method', 'path', 'headers', 'headersRaw'],
+};
+
+const requestAjv = new Ajv();
+const requestValidate = requestAjv.compile(requestSchema);
 
 export default async (
   ctx,
   options,
 ) => {
+  if (!requestValidate(ctx.request)) {
+    throw new Error(JSON.stringify(requestAjv.errors));
+  }
+  assert(ctx.signal && typeof ctx.signal.aborted === 'boolean' && !ctx.signal.aborted);
   assert(Number.isInteger(options.port) && options.port > 0 && options.port <= 65535);
+  const state = {
+    dateTimeConnect: null,
+    complete: false,
+  };
   const socket = getSocketConnect({
     hostname: options.hostname,
     port: options.port,
@@ -21,6 +65,7 @@ export default async (
        10 * 1000,
        ctx.signal,
      );
+    state.dateTimeConnect = Date.now();
   } catch (error) {
     if (!ctx.signal.aborted) {
       console.error(error);
@@ -45,10 +90,20 @@ export default async (
     requestForwardOptions.headers = [
       ...filterHeaders(ctx.request.headersRaw, ['host']),
       'Host',
-      `${options.hostname}:${options.port}`,
+      `${options.hostname || '127.0.0.1'}:${options.port}`,
     ];
-  } else if (!Object.keys(requestForwardOptions.headers).some((headerKey) => !/host/i.test(headerKey))) {
-    requestForwardOptions.headers['Host'] = `${options.hostname}:${options.port}`;
+  } else {
+    requestForwardOptions.headers = convertObjectToArray(requestForwardOptions.headers);
+    if (!getHeaderValue(requestForwardOptions.headers, 'host')) {
+      requestForwardOptions.headers.push('Host');
+      requestForwardOptions.headers.push(`${options.hostname || '127.0.0.1'}:${options.port}`);
+    }
+  }
+
+  if (options.remoteAddress && !getHeaderValue(requestForwardOptions.headers, 'x-remote-address')) {
+    requestForwardOptions.headers = filterHeaders(requestForwardOptions.headers, ['x-remote-address']);
+    requestForwardOptions.headers.push('X-Remote-Address');
+    requestForwardOptions.headers.push(options.remoteAddress);
   }
 
   if (Object.hasOwnProperty.call(options, 'body')) {
@@ -106,8 +161,11 @@ export default async (
           await options.onHeader(ctx);
           assert(!ctx.signal.aborted);
         }
-        if (ctx.response._promise && !ctx.signal.aborted) {
-          await ctx.response._promise();
+        if (!state.complete) {
+          state.complete = true;
+          if (!ctx.signal.aborted && ctx.response._promise) {
+            await ctx.response._promise();
+          }
         }
       },
     },
@@ -116,12 +174,15 @@ export default async (
     .then(
       () => {},
       (error) => {
-        if (!ctx.signal.aborted) {
-          if (ctx.error == null) {
-            ctx.error = error;
-          }
-          if (ctx.response._promise) {
-            ctx.response._promise();
+        if (!state.complete) {
+          state.complete = true;
+          if (!ctx.signal.aborted) {
+            if (ctx.error == null) {
+              ctx.error = error;
+            }
+            if (ctx.response._promise) {
+              ctx.response._promise();
+            }
           }
         }
       },

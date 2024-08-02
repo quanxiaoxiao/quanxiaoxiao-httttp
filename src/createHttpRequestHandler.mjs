@@ -57,12 +57,15 @@ export default ({
   onHttpResponse: async (ctx) => {
     if (ctx.response) {
       if (ctx.response.promise) {
-        await new Promise((resolve) => {
+        await new Promise((resolve, reject) => {
           ctx.response.promise(() => {
-            resolve();
+            if (ctx.error || ctx.signal.aborted) {
+              reject(ctx.error);
+            } else {
+              resolve();
+            }
           });
         });
-        assert(!ctx.signal.aborted);
       }
       if (ctx.error) {
         throw createError(500);
