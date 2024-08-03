@@ -1,7 +1,6 @@
 import handleSocketRequest from './handleSocketRequest.mjs';
-import renderToHtml from './renderToHtml.mjs';
-import parseHtml from './parseHtml.mjs';
-import generateHtmlTag from './generateHtmlTag.mjs';
+import renderToHtml from './html/renderToHtml.mjs';
+import parseHtml from './html/parseHtml.mjs';
 import generateRouteMatchList from './generateRouteMatchList.mjs';
 import createHttpRequestHandler from './createHttpRequestHandler.mjs';
 import forwardRequest from './forwardRequest.mjs';
@@ -18,6 +17,5 @@ export {
   parseHtml,
   attachStateWithHosts,
   renderToHtml,
-  generateHtmlTag,
   decodeResponseStreamToJson,
 };
