@@ -15,19 +15,18 @@ export default (
     }
     return `<${name}>${content ?? ''}</${name}>`;
   }
-  const result = [
-    `<${name}`,
-    ...attributes.map((attrItem) => {
-      const s = attrItem.value == null ? attrItem.name : `${attrItem.name}="${attrItem.value}"`;
-      return ` ${s}`;
-    }),
-    '>',
-  ];
+  let result = `<${name}`;
+  for (let i = 0; i < attributes.length; i++) {
+    const attrItem = attributes[i];
+    result += ' ';
+    result += attrItem.value == null ? attrItem.name : `${attrItem.name}="${attrItem.value}"`;
+  }
+  result += '>';
   if (Object.hasOwnProperty.call(props, 'content')) {
     if (content != null) {
-      result.push(content);
+      result += content;
     }
-    result.push(`</${name}>`);
+    result += `</${name}>`;
   }
-  return result.join('');
+  return result;
 };
