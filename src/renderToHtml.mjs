@@ -1,25 +1,25 @@
 import _ from 'lodash';
 import generateHtmlTag from './generateHtmlTag.mjs';
 
-const generateSpace = (size) => {
+const joinSpaceLine = (size, str = '') => {
   if (!size) {
-    return '';
+    return `${str}\n`;
   }
   let result = '';
   for (let i = 0; i < size; i++) {
     result += '  ';
   }
-  return result;
+  return `${result}${str}\n`;
 };
 
-const render = (arr, depth = 0) => {
+const render = (lineLinst, depth = 0) => {
   let str = '';
-  for (let i = 0; i < arr.length; i++) {
-    const item = arr[i];
-    if (Array.isArray(item)) {
-      str += render(item, depth + 1);
+  for (let i = 0; i < lineLinst.length; i++) {
+    const lineStr = lineLinst[i];
+    if (Array.isArray(lineStr)) {
+      str += render(lineStr, depth + 1);
     } else {
-      str += `${generateSpace(depth)}${item}\n`;
+      str += `${joinSpaceLine(depth, lineStr)}`;
     }
   }
   return str;
