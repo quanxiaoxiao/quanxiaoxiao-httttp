@@ -117,26 +117,32 @@ export default ({
   };
 
   const doResponseError = (ctx) => {
-    if (!controller.signal.aborted && state.currentStep !== HTTP_STEP_RESPONSE_ERROR) {
-      state.currentStep = HTTP_STEP_RESPONSE_ERROR;
-      attachResponseError(ctx);
-      if (onHttpError) {
-        onHttpError(ctx);
-      } else {
-        console.warn(ctx.error);
-      }
-      try {
-        const chunk = encodeHttp(ctx.error.response);
-        const size = chunk.length;
-        state.connector.end(chunk);
-        state.bytesOutgoing += size;
-      } catch (error) {
-        console.warn(error);
-      } finally {
-        if (!controller.signal.aborted) {
-          controller.abort();
+    if (!controller.signal.aborted) {
+      if (state.currentStep >= HTTP_STEP_RESPONSE_HEADER_SPEND) {
+        controller.abort();
+      } else if (state.currentStep !== HTTP_STEP_RESPONSE_ERROR) {
+        state.currentStep = HTTP_STEP_RESPONSE_ERROR;
+        attachResponseError(ctx);
+        if (onHttpError) {
+          onHttpError(ctx);
+        } else {
+          console.warn(ctx.error);
+        }
+        try {
+          const chunk = encodeHttp(ctx.error.response);
+          const size = chunk.length;
+          state.connector.end(chunk);
+          state.bytesOutgoing += size;
+        } catch (error) {
+          console.warn(error);
+        } finally {
+          if (!controller.signal.aborted) {
+            controller.abort();
+          }
         }
       }
+    } else {
+      controller.abort();
     }
   };
 
@@ -179,8 +185,9 @@ export default ({
             stream: ctx.response.body,
             onData: (chunk) => doOutgoning(encodeHttpResponse(chunk), ctx),
             onEnd: () => {
+              const chunk = encodeHttpResponse();
               state.currentStep = HTTP_STEP_RESPONSE_READ_CONTENT_END;
-              doOutgoning(encodeHttpResponse(), ctx);
+              doOutgoning(chunk, ctx);
               doResponseEnd();
             },
             onError: (error) => {
@@ -203,8 +210,9 @@ export default ({
       });
     } else {
       try {
+        const chunk = encodeHttp(generateResponse(ctx));
         state.currentStep = HTTP_STEP_RESPONSE_HEADER_SPEND;
-        doOutgoning(encodeHttp(generateResponse(ctx)), ctx);
+        doOutgoning(chunk, ctx);
         doResponseEnd();
       } catch (error) {
         handleHttpError(error, ctx);
@@ -344,7 +352,7 @@ export default ({
           state.connector.pause();
         }
       },
-      onEnd: async () => {
+      onEnd: async (ret) => {
         if (state.currentStep < HTTP_STEP_REQUEST_END) {
           state.currentStep = HTTP_STEP_REQUEST_END;
         }
@@ -356,10 +364,16 @@ export default ({
           await onHttpRequestEnd(ctx);
           assert(!controller.signal.aborted);
         }
-        if (ctx.request._write) {
-          ctx.request._write();
-        } else {
-          doHttpRequestComplete(ctx);
+        if (ret.dataBuf.length > 0) {
+          state.ctx.error = createError(400);
+          doResponseError(state.ctx);
+        }
+        if (!controller.signal.aborted) {
+          if (ctx.request._write) {
+            ctx.request._write();
+          } else {
+            doHttpRequestComplete(ctx);
+          }
         }
       },
     });
@@ -404,19 +418,7 @@ export default ({
       }
       state.execute(chunk)
         .then(
-          (ret) => {
-            if (!controller.signal.aborted
-              && ret.complete
-              && ret.dataBuf.length > 0) {
-              if (state.ctx) {
-                state.ctx.error = createError(400);
-                doResponseError(state.ctx);
-              } else {
-                state.connector();
-                controller.abort();
-              }
-            }
-          },
+          () => {},
           (error) => {
             if (!controller.signal.aborted) {
               if (state.ctx) {
