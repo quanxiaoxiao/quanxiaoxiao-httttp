@@ -28,6 +28,8 @@ import {
   HTTP_STEP_RESPONSE_WAIT,
   HTTP_STEP_RESPONSE_START,
   HTTP_STEP_RESPONSE_HEADER_SPEND,
+  HTTP_STEP_RESPONSE_READ_CONTENT_CHUNK,
+  HTTP_STEP_RESPONSE_READ_CONTENT_END,
   HTTP_STEP_RESPONSE_END,
   HTTP_STEP_RESPONSE_ERROR,
 } from './constants.mjs';
@@ -161,15 +163,23 @@ export default ({
         statusCode: ctx.response.statusCode,
         headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
         body: ctx.response.body,
-        onHeader: (chunk) => doOutgoning(chunk, ctx),
+        onHeader: (chunk) => {
+          state.currentStep = HTTP_STEP_RESPONSE_HEADER_SPEND;
+          doOutgoning(chunk, ctx);
+        },
       });
       process.nextTick(() => {
-        if (!controller.signal.aborted && ctx.response.body.readable) {
+        if (!controller.signal.aborted
+          && ctx.response.body.readable
+          && state.currentStep === HTTP_STEP_RESPONSE_HEADER_SPEND
+        ) {
+          state.currentStep = HTTP_STEP_RESPONSE_READ_CONTENT_CHUNK;
           wrapStreamRead({
             signal: controller.signal,
             stream: ctx.response.body,
             onData: (chunk) => doOutgoning(encodeHttpResponse(chunk), ctx),
             onEnd: () => {
+              state.currentStep = HTTP_STEP_RESPONSE_READ_CONTENT_END;
               doOutgoning(encodeHttpResponse(), ctx);
               doResponseEnd();
             },
@@ -193,6 +203,7 @@ export default ({
       });
     } else {
       try {
+        state.currentStep = HTTP_STEP_RESPONSE_HEADER_SPEND;
         doOutgoning(encodeHttp(generateResponse(ctx)), ctx);
         doResponseEnd();
       } catch (error) {
