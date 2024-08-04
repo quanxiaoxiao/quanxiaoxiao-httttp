@@ -27,6 +27,7 @@ import {
   HTTP_STEP_REQUEST_END,
   HTTP_STEP_RESPONSE_WAIT,
   HTTP_STEP_RESPONSE_START,
+  HTTP_STEP_RESPONSE_HEADER_SPEND,
   HTTP_STEP_RESPONSE_END,
   HTTP_STEP_RESPONSE_ERROR,
 } from './constants.mjs';
@@ -448,7 +449,14 @@ export default ({
           }
           doSocketClose(error);
         } else {
-          doSocketClose(null);
+          doSocketClose();
+        }
+      },
+      onFinish: () => {
+        if (state.ctx && state.ctx.error) {
+          doSocketClose(state.ctx.error);
+        } else {
+          doSocketClose();
         }
       },
       onError: (error) => {

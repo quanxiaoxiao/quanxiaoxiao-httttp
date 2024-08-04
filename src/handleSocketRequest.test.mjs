@@ -10,6 +10,7 @@ import process from 'node:process';
 import net from 'node:net';
 import assert from 'node:assert';
 import _ from 'lodash';
+import createError from 'http-errors';
 import { waitFor } from '@quanxiaoxiao/utils';
 import { getSocketConnect } from '@quanxiaoxiao/http-request';
 import { wrapStreamRead } from '@quanxiaoxiao/node-utils';
@@ -1601,5 +1602,120 @@ test('handleSocketRequest request 2 1', async () => {
   socket.destroy();
   await waitFor(100);
   assert.equal(onSocketClose.mock.calls.length, 1);
+  server.close();
+});
+
+test('handleSocketRequest', { only: true }, async () => {
+  const port = getPort();
+  const count = 999;
+  const onHttpError = mock.fn(() => {});
+  const onSocketClose = mock.fn(() => {});
+  const onHttpResponse = mock.fn((ctx) => {
+    const content = ctx.request.pathname.match(/\/(\d+)$/)[1];
+    if (Number(content) < count) {
+      ctx.response = {
+        headers: {
+          Server: 'Quan',
+        },
+        body: content,
+      };
+    } else {
+      throw createError(404);
+    }
+  });
+
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpResponse,
+      onHttpError,
+      onSocketClose,
+    });
+  });
+  server.listen(port);
+  await waitFor(100);
+
+  const state = {
+    connector: null,
+  };
+
+  let n = 0;
+
+  const onData = mock.fn(() => {
+    state.connector.write(encodeHttp({
+      method: 'GET',
+      path: `/quan/${n}`,
+      headers: { 'User-Agent': 'quan' },
+      body: null,
+    }));
+    n ++;
+  });
+  const onClose = mock.fn(() => {});
+  const onError = mock.fn(() => {});
+  const onConnect = mock.fn(() => {});
+
+  state.connector = createConnector(
+    {
+      onConnect,
+      onData,
+      onClose,
+      onError,
+    },
+    () => getSocketConnect({ port }),
+  );
+
+  await waitFor(100);
+
+  assert.equal(onConnect.mock.calls.length, 1);
+
+  await waitFor(100);
+
+  state.connector.write(encodeHttp({
+    method: 'GET',
+    path: `/quan/${n}`,
+    headers: { 'User-Agent': 'quan' },
+    body: null,
+  }));
+
+  n++;
+
+  assert.equal(onConnect.mock.calls.length, 1);
+  assert.equal(onClose.mock.calls.length, 0);
+  assert.equal(onError.mock.calls.length, 0);
+
+  await waitFor(3000);
+
+  assert.equal(onClose.mock.calls.length, 1);
+  assert.equal(onError.mock.calls.length, 0);
+  assert.equal(onHttpError.mock.calls.length, 1);
+  assert.equal(onHttpResponse.mock.calls.length, onData.mock.calls.length);
+  assert.equal(onHttpResponse.mock.calls.length, count + 1);
+
+  for (let i = 0; i < onData.mock.calls.length - 1; i++) {
+    const chunk = onData.mock.calls[i].arguments[0];
+    const content = i.toString();
+    assert.equal(
+      chunk.toString(),
+      `HTTP/1.1 200 OK\r\nServer: Quan\r\nContent-Length: ${content.length}\r\n\r\n${content}`,
+    );
+  }
+
+  const message = 'Not Found';
+
+  assert.equal(
+    onData.mock.calls[count].arguments[0].toString(),
+    `HTTP/1.1 404 ${message}\r\nContent-Length: ${message.length}\r\n\r\n${message}`,
+  );
+
+  assert(onHttpError.mock.calls[0].arguments[0].signal.aborted);
+  assert.equal(onSocketClose.mock.calls.length, 1);
+
+  assert.equal(
+    onSocketClose.mock.calls[0].arguments[0].error.message,
+    'Not Found',
+  );
+
+  assert.equal(onSocketClose.mock.calls[0].arguments[0].count, count + 1);
+
   server.close();
 });
