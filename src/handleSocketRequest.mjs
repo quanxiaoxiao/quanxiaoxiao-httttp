@@ -117,9 +117,11 @@ export default ({
   };
 
   const doResponseError = (ctx) => {
-    if (!controller.signal.aborted) {
+    if (!controller.signal.aborted && state.currentStep !== HTTP_STEP_RESPONSE_END) {
       if (state.currentStep >= HTTP_STEP_RESPONSE_HEADER_SPEND) {
         controller.abort();
+        state.connector();
+        doSocketClose(ctx.error);
       } else if (state.currentStep !== HTTP_STEP_RESPONSE_ERROR) {
         state.currentStep = HTTP_STEP_RESPONSE_ERROR;
         attachResponseError(ctx);
@@ -143,6 +145,7 @@ export default ({
       }
     } else {
       controller.abort();
+      state.connector();
     }
   };
 
@@ -381,62 +384,69 @@ export default ({
 
   const handleDataOnSocket = (chunk) => {
     assert(!controller.signal.aborted);
-    state.timeOnLastIncoming = performance.now();
-    const size = chunk.length;
-    state.bytesIncoming += size;
-    if (state.currentStep === HTTP_STEP_EMPTY || state.currentStep === HTTP_STEP_RESPONSE_END) {
-      assert(state.execute == null);
-      if (state.currentStep === HTTP_STEP_EMPTY) {
-        assert(state.ctx === null);
-      }
-      state.currentStep = HTTP_STEP_REQUEST_START;
-      state.count += 1;
-      state.ctx = generateRequestContext();
-      state.ctx.socket = socket;
-      state.ctx.signal = controller.signal;
-      if (onHttpRequest) {
-        const { remoteAddress } = socket;
-        onHttpRequest({
-          dateTimeCreate: state.dateTimeCreate,
-          bytesIncoming: state.bytesIncoming,
-          bytesOutgoing: state.bytesOutgoing,
-          count: state.count,
-          remoteAddress,
-        });
-      }
-      bindExcute();
+    if (state.currentStep >= HTTP_STEP_REQUEST_END
+      && state.currentStep !== HTTP_STEP_RESPONSE_END
+      && state.currentStep !== HTTP_STEP_RESPONSE_WAIT) {
+      handleHttpError(createError(400), state.ctx);
     }
-    if (size > 0) {
-      if (onChunkIncoming) {
-        promisess(onChunkIncoming, state.ctx, chunk)
+    if (!controller.signal.aborted) {
+      state.timeOnLastIncoming = performance.now();
+      const size = chunk.length;
+      state.bytesIncoming += size;
+      if (state.currentStep === HTTP_STEP_EMPTY || state.currentStep === HTTP_STEP_RESPONSE_END) {
+        assert(state.execute == null);
+        if (state.currentStep === HTTP_STEP_EMPTY) {
+          assert(state.ctx === null);
+        }
+        state.currentStep = HTTP_STEP_REQUEST_START;
+        state.count += 1;
+        state.ctx = generateRequestContext();
+        state.ctx.socket = socket;
+        state.ctx.signal = controller.signal;
+        if (onHttpRequest) {
+          const { remoteAddress } = socket;
+          onHttpRequest({
+            dateTimeCreate: state.dateTimeCreate,
+            bytesIncoming: state.bytesIncoming,
+            bytesOutgoing: state.bytesOutgoing,
+            count: state.count,
+            remoteAddress,
+          });
+        }
+        bindExcute();
+      }
+      if (size > 0) {
+        if (onChunkIncoming) {
+          promisess(onChunkIncoming, state.ctx, chunk)
+            .then(
+              () => {},
+              (error) => {
+                console.error(error);
+              },
+            );
+        }
+        state.execute(chunk)
           .then(
             () => {},
             (error) => {
-              console.error(error);
+              if (!controller.signal.aborted) {
+                if (state.ctx) {
+                  if (state.ctx.error == null) {
+                    state.ctx.error = error;
+                    if (error instanceof DecodeHttpError) {
+                      state.ctx.error.statusCode = 400;
+                    }
+                  }
+                  doResponseError(state.ctx);
+                } else {
+                  console.warn(error);
+                  state.connector();
+                  controller.abort();
+                }
+              }
             },
           );
       }
-      state.execute(chunk)
-        .then(
-          () => {},
-          (error) => {
-            if (!controller.signal.aborted) {
-              if (state.ctx) {
-                if (state.ctx.error == null) {
-                  state.ctx.error = error;
-                  if (error instanceof DecodeHttpError) {
-                    state.ctx.error.statusCode = 400;
-                  }
-                }
-                doResponseError(state.ctx);
-              } else {
-                console.warn(error);
-                state.connector();
-                controller.abort();
-              }
-            }
-          },
-        );
     }
   };
 

@@ -1808,7 +1808,6 @@ test('handleSocketRequest ctx.response.body stream trigger error 111', async () 
   server.close();
 });
 
-/*
 test('handleSocketRequest ctx.response.body stream trigger error 222', { only: true }, async () => {
   const port = getPort();
   const responseBodyStream = new PassThrough();
@@ -1818,6 +1817,9 @@ test('handleSocketRequest ctx.response.body stream trigger error 222', { only: t
     ctx.response = {
       body: responseBodyStream,
     };
+    setTimeout(() => {
+      responseBodyStream.end('aaa');
+    }, 1000);
   });
   const server = net.createServer((socket) => {
     handleSocketRequest({
@@ -1842,13 +1844,13 @@ test('handleSocketRequest ctx.response.body stream trigger error 222', { only: t
     },
     () => getSocketConnect({ port }),
   );
-  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nContent-Length: 0\r\n\r\neee'));
-  await waitFor(1000);
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nContent-Length: 0\r\n\r\n'));
+  await waitFor(500);
   assert.equal(onHttpResponse.mock.calls.length, 1);
   assert.equal(onHttpError.mock.calls.length, 0);
   assert.equal(onClose.mock.calls.length, 0);
   state.connector.write(Buffer.from('xxxx'));
-  console.log(888);
-  // server.close();
+  await waitFor(100);
+  assert.equal(onClose.mock.calls.length, 1);
+  server.close();
 });
-*/
