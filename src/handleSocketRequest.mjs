@@ -119,9 +119,7 @@ export default ({
   const doResponseError = (ctx) => {
     if (!controller.signal.aborted && state.currentStep !== HTTP_STEP_RESPONSE_END) {
       if (state.currentStep >= HTTP_STEP_RESPONSE_HEADER_SPEND) {
-        controller.abort();
-        state.connector();
-        doSocketClose(ctx.error);
+        shutdown(ctx.error);
       } else if (state.currentStep !== HTTP_STEP_RESPONSE_ERROR) {
         state.currentStep = HTTP_STEP_RESPONSE_ERROR;
         attachResponseError(ctx);
@@ -144,8 +142,7 @@ export default ({
         }
       }
     } else {
-      controller.abort();
-      state.connector();
+      shutdown(ctx.error);
     }
   };
 
@@ -222,6 +219,14 @@ export default ({
       }
     }
   };
+
+  function shutdown(error) {
+    state.connector();
+    if (!controller.signal.aborted) {
+      controller.abort();
+    }
+    doSocketClose(error);
+  }
 
   const doHttpRequestComplete = (ctx) => {
     assert(!controller.signal.aborted);
@@ -382,44 +387,45 @@ export default ({
   function checkRequestChunkValid (chunk) {
     assert(!controller.signal.aborted);
     const size = chunk.length;
-    if (size > 0
-      && state.currentStep >= HTTP_STEP_REQUEST_END
-      && state.currentStep !== HTTP_STEP_RESPONSE_END
-      && state.currentStep !== HTTP_STEP_RESPONSE_WAIT) {
-      handleHttpError(createError(400), state.ctx);
-    } else if (size > 0) {
+    if (size > 0) {
       state.timeOnLastIncoming = performance.now();
       const size = chunk.length;
       state.bytesIncoming += size;
-      if (state.currentStep === HTTP_STEP_EMPTY || state.currentStep === HTTP_STEP_RESPONSE_END) {
-        assert(state.execute == null);
-        if (state.currentStep === HTTP_STEP_EMPTY) {
-          assert(state.ctx === null);
+      if (state.currentStep >= HTTP_STEP_REQUEST_END
+        && state.currentStep !== HTTP_STEP_RESPONSE_END
+        && state.currentStep !== HTTP_STEP_RESPONSE_WAIT) {
+        handleHttpError(createError(400), state.ctx);
+      } else {
+        if (state.currentStep === HTTP_STEP_EMPTY || state.currentStep === HTTP_STEP_RESPONSE_END) {
+          assert(state.execute == null);
+          if (state.currentStep === HTTP_STEP_EMPTY) {
+            assert(state.ctx === null);
+          }
+          state.currentStep = HTTP_STEP_REQUEST_START;
+          state.count += 1;
+          state.ctx = generateRequestContext();
+          state.ctx.socket = socket;
+          state.ctx.signal = controller.signal;
+          if (onHttpRequest) {
+            onHttpRequest({
+              dateTimeCreate: state.dateTimeCreate,
+              bytesIncoming: state.bytesIncoming,
+              bytesOutgoing: state.bytesOutgoing,
+              count: state.count,
+              remoteAddress: socket.remoteAddress,
+            });
+          }
+          bindExcute();
         }
-        state.currentStep = HTTP_STEP_REQUEST_START;
-        state.count += 1;
-        state.ctx = generateRequestContext();
-        state.ctx.socket = socket;
-        state.ctx.signal = controller.signal;
-        if (onHttpRequest) {
-          onHttpRequest({
-            dateTimeCreate: state.dateTimeCreate,
-            bytesIncoming: state.bytesIncoming,
-            bytesOutgoing: state.bytesOutgoing,
-            count: state.count,
-            remoteAddress: socket.remoteAddress,
-          });
+        if (onChunkIncoming) {
+          promisess(onChunkIncoming, state.ctx, chunk)
+            .then(
+              () => {},
+              (error) => {
+                console.error(error);
+              },
+            );
         }
-        bindExcute();
-      }
-      if (onChunkIncoming) {
-        promisess(onChunkIncoming, state.ctx, chunk)
-          .then(
-            () => {},
-            (error) => {
-              console.error(error);
-            },
-          );
       }
     }
   }
@@ -441,10 +447,10 @@ export default ({
                 }
                 doResponseError(state.ctx);
               } else {
-                console.warn(error);
-                state.connector();
-                controller.abort();
+                shutdown(error);
               }
+            } else {
+              shutdown(state.ctx?.error);
             }
           },
         );
