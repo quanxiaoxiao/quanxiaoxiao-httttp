@@ -1808,7 +1808,7 @@ test('handleSocketRequest ctx.response.body stream trigger error 111', async () 
   server.close();
 });
 
-test('handleSocketRequest ctx.response.body stream trigger error 222', { only: true }, async () => {
+test('handleSocketRequest ctx.response.body stream trigger error 222', async () => {
   const port = getPort();
   const responseBodyStream = new PassThrough();
   const onHttpError = mock.fn(() => {});
@@ -1858,5 +1858,48 @@ test('handleSocketRequest ctx.response.body stream trigger error 222', { only: t
     'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n',
   );
   assert(responseBodyStream.destroyed);
+  server.close();
+});
+
+test('handleSocketRequest ctx.response.body stream trigger error 333', async () => {
+  const port = getPort();
+  const onHttpError = mock.fn(() => {});
+  const onHttpResponse = mock.fn(async (ctx) => {
+    await waitFor(1000);
+    assert(ctx.socket.destroyed);
+  });
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpError,
+      onHttpResponse,
+    });
+  });
+  server.listen(port);
+  const state = {
+    connector: null,
+  };
+  const onData = mock.fn(() => {});
+
+  const onClose = mock.fn(() => {});
+  const onError = mock.fn(() => {});
+  state.connector = createConnector(
+    {
+      onData,
+      onClose,
+      onError,
+    },
+    () => getSocketConnect({ port }),
+  );
+  state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nContent-Length: 3\r\n\r\nab'));
+  await waitFor(100);
+  assert.equal(onClose.mock.calls.length, 0);
+  state.connector.write(Buffer.from('cce'));
+  await waitFor(500);
+  assert.equal(onData.mock.calls.length, 1);
+  assert.equal(onHttpResponse.mock.calls.length, 0);
+  assert.equal(onClose.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 1);
+  assert(/^HTTP\/1.1 400/.test(onData.mock.calls[0].arguments[0]));
   server.close();
 });

@@ -351,11 +351,6 @@ export default ({
           }
         }
         ctx.request._write(chunk);
-        /*
-        if (state.currentStep >= HTTP_STEP_REQUEST_END) {
-          state.connector.pause();
-        }
-        */
       },
       onEnd: async (ret) => {
         if (state.currentStep < HTTP_STEP_REQUEST_END) {
