@@ -1811,14 +1811,13 @@ test('handleSocketRequest ctx.response.body stream trigger error 111', async () 
 test('handleSocketRequest ctx.response.body stream trigger error 222', { only: true }, async () => {
   const port = getPort();
   const responseBodyStream = new PassThrough();
-  const onHttpError = mock.fn(() => {
-  });
-  const onHttpResponse = mock.fn((ctx) => {
+  const onHttpError = mock.fn(() => {});
+  const onHttpResponse = mock.fn(async (ctx) => {
     ctx.response = {
       body: responseBodyStream,
     };
     setTimeout(() => {
-      responseBodyStream.end('aaa');
+      assert(ctx.socket.destroyed);
     }, 1000);
   });
   const server = net.createServer((socket) => {
@@ -1846,11 +1845,18 @@ test('handleSocketRequest ctx.response.body stream trigger error 222', { only: t
   );
   state.connector.write(Buffer.from('GET /aaa HTTP/1.1\r\nContent-Length: 0\r\n\r\n'));
   await waitFor(500);
+  assert.equal(onData.mock.calls.length, 1);
   assert.equal(onHttpResponse.mock.calls.length, 1);
-  assert.equal(onHttpError.mock.calls.length, 0);
   assert.equal(onClose.mock.calls.length, 0);
   state.connector.write(Buffer.from('xxxx'));
   await waitFor(100);
   assert.equal(onClose.mock.calls.length, 1);
+  assert.equal(onHttpError.mock.calls.length, 0);
+  assert.equal(onData.mock.calls.length, 1);
+  assert.equal(
+    onData.mock.calls[0].arguments[0].toString(),
+    'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n',
+  );
+  assert(responseBodyStream.destroyed);
   server.close();
 });

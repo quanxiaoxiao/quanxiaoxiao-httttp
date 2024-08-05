@@ -351,9 +351,11 @@ export default ({
           }
         }
         ctx.request._write(chunk);
+        /*
         if (state.currentStep >= HTTP_STEP_REQUEST_END) {
           state.connector.pause();
         }
+        */
       },
       onEnd: async (ret) => {
         if (state.currentStep < HTTP_STEP_REQUEST_END) {
@@ -382,14 +384,15 @@ export default ({
     });
   };
 
-  const handleDataOnSocket = (chunk) => {
+  function checkRequestChunkValid (chunk) {
     assert(!controller.signal.aborted);
-    if (state.currentStep >= HTTP_STEP_REQUEST_END
+    const size = chunk.length;
+    if (size > 0
+      && state.currentStep >= HTTP_STEP_REQUEST_END
       && state.currentStep !== HTTP_STEP_RESPONSE_END
       && state.currentStep !== HTTP_STEP_RESPONSE_WAIT) {
       handleHttpError(createError(400), state.ctx);
-    }
-    if (!controller.signal.aborted) {
+    } else if (size > 0) {
       state.timeOnLastIncoming = performance.now();
       const size = chunk.length;
       state.bytesIncoming += size;
@@ -404,51 +407,54 @@ export default ({
         state.ctx.socket = socket;
         state.ctx.signal = controller.signal;
         if (onHttpRequest) {
-          const { remoteAddress } = socket;
           onHttpRequest({
             dateTimeCreate: state.dateTimeCreate,
             bytesIncoming: state.bytesIncoming,
             bytesOutgoing: state.bytesOutgoing,
             count: state.count,
-            remoteAddress,
+            remoteAddress: socket.remoteAddress,
           });
         }
         bindExcute();
       }
-      if (size > 0) {
-        if (onChunkIncoming) {
-          promisess(onChunkIncoming, state.ctx, chunk)
-            .then(
-              () => {},
-              (error) => {
-                console.error(error);
-              },
-            );
-        }
-        state.execute(chunk)
+      if (onChunkIncoming) {
+        promisess(onChunkIncoming, state.ctx, chunk)
           .then(
             () => {},
             (error) => {
-              if (!controller.signal.aborted) {
-                if (state.ctx) {
-                  if (state.ctx.error == null) {
-                    state.ctx.error = error;
-                    if (error instanceof DecodeHttpError) {
-                      state.ctx.error.statusCode = 400;
-                    }
-                  }
-                  doResponseError(state.ctx);
-                } else {
-                  console.warn(error);
-                  state.connector();
-                  controller.abort();
-                }
-              }
+              console.error(error);
             },
           );
       }
     }
-  };
+  }
+
+  function handleDataOnSocket (chunk) {
+    checkRequestChunkValid(chunk);
+    if (!controller.signal.aborted && chunk.length > 0) {
+      state.execute(chunk)
+        .then(
+          () => {},
+          (error) => {
+            if (!controller.signal.aborted) {
+              if (state.ctx) {
+                if (state.ctx.error == null) {
+                  state.ctx.error = error;
+                  if (error instanceof DecodeHttpError) {
+                    state.ctx.error.statusCode = 400;
+                  }
+                }
+                doResponseError(state.ctx);
+              } else {
+                console.warn(error);
+                state.connector();
+                controller.abort();
+              }
+            }
+          },
+        );
+    }
+  }
 
   state.connector = createConnector(
     {
