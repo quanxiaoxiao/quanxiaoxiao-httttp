@@ -11,6 +11,7 @@ import {
   decodeHttpRequest,
   encodeHttp,
   parseHttpPath,
+  parseHttpUrl,
   hasHttpBodyContent,
   DecodeHttpError,
 } from '@quanxiaoxiao/http-utils';
@@ -274,11 +275,21 @@ export default ({
         ctx.request.timeOnStartLine = calcTimeByRequest(ctx);
         ctx.request.httpVersion = ret.httpVersion;
         ctx.request.method = ret.method;
-        const [pathname, querystring, query] = parseHttpPath(ret.path);
-        ctx.request.path = ret.path;
-        ctx.request.pathname = pathname;
-        ctx.request.querystring = querystring;
-        ctx.request.query = query;
+        ctx.request.url = ret.path;
+        if (/^https?:\/\//.test(ret.path)) {
+          const urlParseResult = parseHttpUrl(ret.path);
+          const [pathname, querystring, query] = parseHttpPath(urlParseResult.path);
+          ctx.request.path = urlParseResult.path;
+          ctx.request.pathname = pathname;
+          ctx.request.querystring = querystring;
+          ctx.request.query = query;
+        } else {
+          const [pathname, querystring, query] = parseHttpPath(ret.path);
+          ctx.request.path = ret.path;
+          ctx.request.pathname = pathname;
+          ctx.request.querystring = querystring;
+          ctx.request.query = query;
+        }
         if (onHttpRequestStartLine) {
           await onHttpRequestStartLine(ctx);
           assert(ctx.response == null);

@@ -1,5 +1,6 @@
 export default () => ({
   request: {
+    url: null,
     dateTimeCreate: Date.now(),
     timeOnStart: performance.now(),
     timeOnStartLine: null,

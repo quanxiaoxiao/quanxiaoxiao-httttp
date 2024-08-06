@@ -242,6 +242,49 @@ test('handleSocketRequest request.body stream 1', async () => {
   server.close();
 });
 
+test('handleSocketRequest request path with url', { only: true }, async () => {
+  const port = getPort();
+  const onHttpRequestHeader = mock.fn((ctx) => {
+    assert.equal(ctx.request.pathname, '/static/mtruck/jessibuca.js');
+    assert.equal(ctx.request.path, '/static/mtruck/jessibuca.js?name=test');
+    assert.equal(ctx.request.querystring, 'name=test');
+    assert.deepEqual(ctx.request.query, { name: 'test' });
+  });
+  const onHttpResponse = mock.fn((ctx) => {
+    ctx.response = {
+      body: 'ok',
+    };
+  });
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      onHttpResponse,
+      onHttpRequestHeader,
+    });
+  });
+  server.listen(port);
+  await waitFor(100);
+  const onData = mock.fn(() => {});
+  const onClose = mock.fn(() => {});
+  const onError = mock.fn(() => {});
+  const connector = createConnector(
+    {
+      onData,
+      onClose,
+      onError,
+    },
+    () => getSocketConnect({ port }),
+  );
+  await waitFor(100);
+  connector.write(Buffer.from('GET http://127.0.0.1:9090/static/mtruck/jessibuca.js?name=test HTTP/1.1\r\nUser-Agent: quan\r\n\r\n'));
+  await waitFor(1000);
+  assert.equal(onHttpRequestHeader.mock.calls.length, 1);
+  assert.equal(onHttpResponse.mock.calls.length, 1);
+  assert.equal(onData.mock.calls.length, 1);
+  connector();
+  server.close();
+});
+
 test('handleSocketRequest request.body set invalid', async () => {
   const port = getPort();
   const onHttpRequestHeader = mock.fn((ctx) => {
