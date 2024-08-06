@@ -386,74 +386,72 @@ export default ({
 
   function checkRequestChunkValid (chunk) {
     assert(!controller.signal.aborted);
-    const size = chunk.length;
-    if (size > 0) {
-      state.timeOnLastIncoming = performance.now();
-      const size = chunk.length;
-      state.bytesIncoming += size;
-      if (state.currentStep >= HTTP_STEP_REQUEST_END
-        && state.currentStep !== HTTP_STEP_RESPONSE_END
-        && state.currentStep !== HTTP_STEP_RESPONSE_WAIT) {
-        handleHttpError(createError(400), state.ctx);
-      } else {
-        if (state.currentStep === HTTP_STEP_EMPTY || state.currentStep === HTTP_STEP_RESPONSE_END) {
-          assert(state.execute == null);
-          if (state.currentStep === HTTP_STEP_EMPTY) {
-            assert(state.ctx === null);
-          }
-          state.currentStep = HTTP_STEP_REQUEST_START;
-          state.count += 1;
-          state.ctx = generateRequestContext();
-          state.ctx.socket = socket;
-          state.ctx.signal = controller.signal;
-          if (onHttpRequest) {
-            onHttpRequest({
-              dateTimeCreate: state.dateTimeCreate,
-              bytesIncoming: state.bytesIncoming,
-              bytesOutgoing: state.bytesOutgoing,
-              count: state.count,
-              remoteAddress: socket.remoteAddress,
-            });
-          }
-          bindExcute();
+    state.timeOnLastIncoming = performance.now();
+    state.bytesIncoming += chunk.length;
+    if (state.currentStep >= HTTP_STEP_REQUEST_END
+      && state.currentStep !== HTTP_STEP_RESPONSE_END
+      && state.currentStep !== HTTP_STEP_RESPONSE_WAIT) {
+      handleHttpError(createError(400), state.ctx);
+    } else {
+      if (state.currentStep === HTTP_STEP_EMPTY || state.currentStep === HTTP_STEP_RESPONSE_END) {
+        assert(state.execute == null);
+        if (state.currentStep === HTTP_STEP_EMPTY) {
+          assert(state.ctx === null);
         }
-        if (onChunkIncoming) {
-          promisess(onChunkIncoming, state.ctx, chunk)
-            .then(
-              () => {},
-              (error) => {
-                console.error(error);
-              },
-            );
+        state.currentStep = HTTP_STEP_REQUEST_START;
+        state.count += 1;
+        state.ctx = generateRequestContext();
+        state.ctx.socket = socket;
+        state.ctx.signal = controller.signal;
+        if (onHttpRequest) {
+          onHttpRequest({
+            dateTimeCreate: state.dateTimeCreate,
+            bytesIncoming: state.bytesIncoming,
+            bytesOutgoing: state.bytesOutgoing,
+            count: state.count,
+            remoteAddress: socket.remoteAddress,
+          });
         }
+        bindExcute();
+      }
+      if (onChunkIncoming) {
+        promisess(onChunkIncoming, state.ctx, chunk)
+          .then(
+            () => {},
+            (error) => {
+              console.error(error);
+            },
+          );
       }
     }
   }
 
   function handleDataOnSocket (chunk) {
-    checkRequestChunkValid(chunk);
-    if (!controller.signal.aborted && chunk.length > 0) {
-      state.execute(chunk)
-        .then(
-          () => {},
-          (error) => {
-            if (!controller.signal.aborted) {
-              if (state.ctx) {
-                if (state.ctx.error == null) {
-                  state.ctx.error = error;
-                  if (error instanceof DecodeHttpError) {
-                    state.ctx.error.statusCode = 400;
+    if (chunk.length > 0) {
+      checkRequestChunkValid(chunk);
+      if (!controller.signal.aborted) {
+        state.execute(chunk)
+          .then(
+            () => {},
+            (error) => {
+              if (!controller.signal.aborted) {
+                if (state.ctx) {
+                  if (state.ctx.error == null) {
+                    state.ctx.error = error;
+                    if (error instanceof DecodeHttpError) {
+                      state.ctx.error.statusCode = 400;
+                    }
                   }
+                  doResponseError(state.ctx);
+                } else {
+                  shutdown(error);
                 }
-                doResponseError(state.ctx);
               } else {
-                shutdown(error);
+                shutdown(state.ctx?.error);
               }
-            } else {
-              shutdown(state.ctx?.error);
-            }
-          },
-        );
+            },
+          );
+      }
     }
   }
 
