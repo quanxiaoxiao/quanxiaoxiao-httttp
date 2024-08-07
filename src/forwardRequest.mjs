@@ -2,14 +2,10 @@ import { PassThrough } from 'node:stream';
 import assert from 'node:assert';
 import createError from 'http-errors';
 import Ajv from 'ajv';
-import {
-  filterHeaders,
-  hasHttpBodyContent,
-  convertObjectToArray,
-  getHeaderValue,
-} from '@quanxiaoxiao/http-utils';
+import { hasHttpBodyContent } from '@quanxiaoxiao/http-utils';
 import { waitConnect } from '@quanxiaoxiao/socket';
 import request, { getSocketConnect } from '@quanxiaoxiao/http-request';
+import generateRequestForwardOptions from './generateRequestForwardOptions.mjs';
 
 const requestSchema = {
   type: 'object',
@@ -73,38 +69,7 @@ export default async (
     }
   }
 
-  const requestForwardOptions = {
-    method: options.method,
-    path: options.path,
-    headers: options.headers,
-  };
-
-  if (requestForwardOptions.method == null) {
-    requestForwardOptions.method = ctx.request.method;
-  }
-  if (requestForwardOptions.path == null) {
-    requestForwardOptions.path = ctx.request.path;
-  }
-
-  if (!requestForwardOptions.headers) {
-    requestForwardOptions.headers = [
-      ...filterHeaders(ctx.request.headersRaw, ['host']),
-      'Host',
-      `${options.hostname || '127.0.0.1'}:${options.port}`,
-    ];
-  } else {
-    requestForwardOptions.headers = convertObjectToArray(requestForwardOptions.headers);
-    if (!getHeaderValue(requestForwardOptions.headers, 'host')) {
-      requestForwardOptions.headers.push('Host');
-      requestForwardOptions.headers.push(`${options.hostname || '127.0.0.1'}:${options.port}`);
-    }
-  }
-
-  if (options.remoteAddress && !getHeaderValue(requestForwardOptions.headers, 'x-remote-address')) {
-    requestForwardOptions.headers = filterHeaders(requestForwardOptions.headers, ['x-remote-address']);
-    requestForwardOptions.headers.push('X-Remote-Address');
-    requestForwardOptions.headers.push(options.remoteAddress);
-  }
+  const requestForwardOptions = generateRequestForwardOptions(options, ctx.request);
 
   if (Object.hasOwnProperty.call(options, 'body')) {
     requestForwardOptions.body = options.body;

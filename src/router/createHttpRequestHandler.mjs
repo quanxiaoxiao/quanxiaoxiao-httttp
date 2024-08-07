@@ -1,8 +1,10 @@
 import assert from 'node:assert';
 import { Readable, PassThrough } from 'node:stream';
+import _ from 'lodash';
 import { decodeContentToJSON } from '@quanxiaoxiao/http-utils';
 import { wrapStreamRead } from '@quanxiaoxiao/node-utils';
 import createError from 'http-errors';
+import forwardWebsocket from '../forwardWebsocket.mjs';
 
 export default ({
   list: routeMatchList,
@@ -39,7 +41,7 @@ export default ({
         await ctx.routeMatched.onPre(ctx);
         assert(!ctx.signal.aborted);
       }
-      if (ctx.requestHandler.validate) {
+      if (!ctx.request.connection && ctx.requestHandler.validate) {
         ctx.request.body = new PassThrough();
         ctx.request.dataBuf = Buffer.from([]);
         wrapStreamRead({
@@ -93,13 +95,27 @@ export default ({
       ctx.routeMatched.onPost(ctx);
     }
   },
+  onWebSocket: async ({ ctx, ...hooks }) => {
+    await ctx.requestHandler.fn(ctx);
+    if (!ctx.forward) {
+      throw createError(503);
+    }
+    assert(_.isPlainObject(ctx.forward));
+    await forwardWebsocket({
+      socket: ctx.socket,
+      signal: ctx.signal,
+      request: ctx.request,
+      ...hooks,
+      options: ctx.forward,
+    });
+  },
   onHttpError: (ctx) => {
     assert(ctx.error && ctx.error.response);
     const message = `$$${ctx.request.method} ${ctx.request.path} ${ctx.error.response.statusCode} ${ctx.error.message}`;
     if (logger) {
       logger.warn(message);
     } else {
-      console.log(message);
+      console.warn(message);
     }
     if (ctx.error.response.statusCode >= 500 && ctx.error.response.statusCode <= 599) {
       console.error(ctx.error);

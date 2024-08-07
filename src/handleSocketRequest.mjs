@@ -14,6 +14,7 @@ import {
   parseHttpUrl,
   hasHttpBodyContent,
   DecodeHttpError,
+  isWebSocketRequest,
 } from '@quanxiaoxiao/http-utils';
 import {
   wrapStreamWrite,
@@ -33,6 +34,7 @@ import {
   HTTP_STEP_RESPONSE_READ_CONTENT_END,
   HTTP_STEP_RESPONSE_END,
   HTTP_STEP_RESPONSE_ERROR,
+  HTTP_STEP_REQUEST_WEBSOCKET_CONNECTION,
 } from './constants.mjs';
 import attachResponseError from './attachResponseError.mjs';
 import generateResponse from './generateResponse.mjs';
@@ -47,6 +49,7 @@ const promisess = async (fn, ...args) => {
 
 export default ({
   socket,
+  onWebSocket,
   onHttpRequest,
   onHttpRequestStartLine,
   onHttpRequestHeader,
@@ -263,6 +266,8 @@ export default ({
         count: state.count,
         step: state.currentStep,
         error,
+        request: state.ctx ? state.ctx.request : null,
+        response: state.ctx ? state.ctx.response : null,
       });
     }
   };
@@ -306,60 +311,131 @@ export default ({
           await onHttpRequestHeader(ctx);
           assert(!controller.signal.aborted);
         }
-        if (hasHttpBodyContent(ctx.request.headers)) {
-          if (ctx.request.body == null) {
-            ctx.request.body = new PassThrough();
+        if (isWebSocketRequest(ctx.request)) {
+          if (!onWebSocket) {
+            throw createError(501);
           }
-          assert(ctx.request.body instanceof Writable);
-          ctx.request._write = wrapStreamWrite({
-            stream: ctx.request.body,
-            signal: controller.signal,
-            onPause: () => {
-              state.connector.pause();
+          ctx.request.connection = true;
+          state.currentStep = HTTP_STEP_REQUEST_WEBSOCKET_CONNECTION;
+          state.execute = null;
+          if (!ctx.socket.isPaused()) {
+            ctx.socket.pause();
+          }
+          ctx.request.bytesBody = 0;
+          ctx.response = {
+            headers: {},
+            headersRaw: [],
+            statusCode: null,
+            httpVersion: null,
+            statusText: null,
+            timeOnConnect: null,
+            timeOnStartLine: null,
+            timeOnBody: null,
+            timeOnHeader: null,
+            bytesBody: 0,
+          };
+          await onWebSocket({
+            ctx,
+            onHttpResponseStartLine: (ret) => {
+              ctx.response.timeOnStartLine = performance.now();
+              ctx.response.statusCode = ret.statusCode;
+              ctx.response.statusText = ret.statusText;
+              ctx.response.httpVersion = ret.httpVersion;
             },
-            onDrain: () => {
-              state.connector.resume();
+            onHttpResponseHeader: (ret) => {
+              ctx.response.timeOnHeader = performance.now();
+              ctx.response.headersRaw = ret.headersRaw;
+              ctx.response.headers = ret.headers;
             },
-            onError: (error) => {
-              if (!controller.signal.aborted) {
-                if (!ctx.error) {
-                  ctx.error = new Error(`request body stream, \`${error.message}\``);
-                }
-                doResponseError(ctx);
+            onHttpResponseBody: (chunk) => {
+              ctx.response.bytesBody += chunk.length;
+              if (ctx.response.timeOnBody == null) {
+                ctx.response.timeOnBody = performance.now();
               }
             },
-            onEnd: () => {
-              doHttpRequestComplete(ctx);
+            onError: (error) => {
+              doSocketClose(error);
+            },
+            onClose: () => {
+              doSocketClose();
+            },
+            onConnect: () => {
+              ctx.response.timeOnConnect = performance.now();
+              process.nextTick(() => {
+                if (!controller.signal.aborted) {
+                  state.connector.detach();
+                }
+              });
+            },
+            onChunkIncoming: (chunk) => {
+              state.timeOnLastIncoming = performance.now();
+              state.bytesIncoming += chunk.length;
+              ctx.request.bytesBody += chunk.length;
+              if (ctx.request.timeOnBody == null) {
+                ctx.response.timeOnBody = state.timeOnLastIncoming;
+              }
+            },
+            onChunkOutgoing: (chunk) => {
+              state.bytesOutgoing += chunk.length;
             },
           });
-        } else if (ctx.request.body != null) {
-          if (ctx.request.body instanceof Readable && !ctx.request.body.destroyed) {
-            ctx.request.body.destroy();
-          }
-          ctx.request.body = null;
-        }
-        if (ctx.response) {
-          assert(_.isPlainObject(ctx.response));
-          state.currentStep = HTTP_STEP_RESPONSE_WAIT;
-          if (onHttpResponse) {
-            promisess(onHttpResponse, ctx)
-              .then(
-                () => {
-                  if (!controller.signal.aborted) {
-                    doResponse(ctx);
+        } else {
+          if (hasHttpBodyContent(ctx.request.headers)) {
+            if (ctx.request.body == null) {
+              ctx.request.body = new PassThrough();
+            }
+            assert(ctx.request.body instanceof Writable);
+            ctx.request._write = wrapStreamWrite({
+              stream: ctx.request.body,
+              signal: controller.signal,
+              onPause: () => {
+                state.connector.pause();
+              },
+              onDrain: () => {
+                state.connector.resume();
+              },
+              onError: (error) => {
+                if (!controller.signal.aborted) {
+                  if (!ctx.error) {
+                    ctx.error = new Error(`request body stream, \`${error.message}\``);
                   }
-                },
-                (error) => {
-                  handleHttpError(error, ctx);
-                },
-              );
-          } else {
-            doResponse(ctx);
+                  doResponseError(ctx);
+                }
+              },
+              onEnd: () => {
+                doHttpRequestComplete(ctx);
+              },
+            });
+          } else if (ctx.request.body != null) {
+            if (ctx.request.body instanceof Readable && !ctx.request.body.destroyed) {
+              ctx.request.body.destroy();
+            }
+            ctx.request.body = null;
+          }
+          if (ctx.response) {
+            assert(_.isPlainObject(ctx.response));
+            state.currentStep = HTTP_STEP_RESPONSE_WAIT;
+            if (onHttpResponse) {
+              promisess(onHttpResponse, ctx)
+                .then(
+                  () => {
+                    if (!controller.signal.aborted) {
+                      doResponse(ctx);
+                    }
+                  },
+                  (error) => {
+                    handleHttpError(error, ctx);
+                  },
+                );
+            } else {
+              doResponse(ctx);
+            }
           }
         }
       },
       onBody: (chunk) => {
         assert(!controller.signal.aborted);
+        assert(!ctx.request.connection);
         if (ctx.request.timeOnBody == null) {
           ctx.request.timeOnBody = calcTimeByRequest(ctx);
           if (state.currentStep < HTTP_STEP_REQUEST_BODY) {
@@ -369,26 +445,28 @@ export default ({
         ctx.request._write(chunk);
       },
       onEnd: async (ret) => {
-        if (state.currentStep < HTTP_STEP_REQUEST_END) {
-          state.currentStep = HTTP_STEP_REQUEST_END;
-        }
-        ctx.request.timeOnEnd = calcTimeByRequest(ctx);
-        if (ctx.request.timeOnBody == null) {
-          ctx.request.timeOnBody = ctx.request.timeOnEnd;
-        }
-        if (onHttpRequestEnd) {
-          await onHttpRequestEnd(ctx);
-          assert(!controller.signal.aborted);
-        }
-        if (ret.dataBuf.length > 0) {
-          state.ctx.error = createError(400);
-          doResponseError(state.ctx);
-        }
-        if (!controller.signal.aborted) {
-          if (ctx.request._write) {
-            ctx.request._write();
-          } else {
-            doHttpRequestComplete(ctx);
+        if (!ctx.request.connection) {
+          if (state.currentStep < HTTP_STEP_REQUEST_END) {
+            state.currentStep = HTTP_STEP_REQUEST_END;
+          }
+          ctx.request.timeOnEnd = calcTimeByRequest(ctx);
+          if (ctx.request.timeOnBody == null) {
+            ctx.request.timeOnBody = ctx.request.timeOnEnd;
+          }
+          if (onHttpRequestEnd) {
+            await onHttpRequestEnd(ctx);
+            assert(!controller.signal.aborted);
+          }
+          if (ret.dataBuf.length > 0) {
+            state.ctx.error = createError(400);
+            doResponseError(state.ctx);
+          }
+          if (!controller.signal.aborted) {
+            if (ctx.request._write) {
+              ctx.request._write();
+            } else {
+              doHttpRequestComplete(ctx);
+            }
           }
         }
       },
