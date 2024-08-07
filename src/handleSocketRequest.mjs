@@ -374,9 +374,27 @@ export default ({
               if (ctx.request.timeOnBody == null) {
                 ctx.response.timeOnBody = state.timeOnLastIncoming;
               }
+              if (onChunkIncoming) {
+                promisess(onChunkIncoming, state.ctx, chunk)
+                  .then(
+                    () => {},
+                    (error) => {
+                      console.error(error);
+                    },
+                  );
+              }
             },
             onChunkOutgoing: (chunk) => {
               state.bytesOutgoing += chunk.length;
+              if (onChunkOutgoing) {
+                promisess(onChunkOutgoing, state.ctx, chunk)
+                  .then(
+                    () => {},
+                    (error) => {
+                      console.error(error);
+                    },
+                  );
+              }
             },
           });
         } else {
