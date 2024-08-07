@@ -2,11 +2,11 @@ import { STATUS_CODES } from 'node:http';
 import { Buffer } from 'node:buffer';
 import { Readable } from 'node:stream';
 import assert from 'node:assert';
-import zlib from 'node:zlib';
 import createError from 'http-errors';
 import {
   convertObjectToArray,
   filterHeaders,
+  encodeContentEncoding,
   setHeaders,
 } from '@quanxiaoxiao/http-utils';
 
@@ -43,20 +43,26 @@ export default (ctx) => {
         response.headers,
         ['content-encoding'],
       );
-      if (ctx.request && ctx.request.headers && /\bgzip\b/i.test(ctx.request.headers['accept-encoding'])) {
-        response.headers = setHeaders(
-          response.headers,
-          {
-            'Content-Type': 'application/json',
-            'Content-Encoding': 'gzip',
-          },
-        );
-        response.body = zlib.gzipSync(JSON.stringify(ctx.response.data));
+      if (ctx.request
+          && ctx.request.headers
+          && Object.hasOwnProperty.call(ctx.request.headers, 'accept-encoding')) {
+        const chunk = Buffer.from(JSON.stringify(ctx.response.data));
+        const ret = encodeContentEncoding(chunk, ctx.request.headers['accept-encoding']);
+        if (ret.name) {
+          response.headers = setHeaders(
+            response.headers,
+            {
+              'Content-Type': 'application/json; charset=utf-8',
+              'Content-Encoding': ret.name,
+            },
+          );
+        }
+        response.body = ret.buf;
       } else {
         response.headers = setHeaders(
           response.headers,
           {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json; charset=utf-8',
           },
         );
         response.body = JSON.stringify(ctx.response.data);

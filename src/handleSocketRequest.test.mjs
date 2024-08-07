@@ -975,7 +975,7 @@ test('handleSocketRequest ctx.response.data 1', async () => {
   assert.equal(onData.mock.calls.length, 1);
   assert.equal(
     onData.mock.calls[0].arguments[0].toString(),
-    'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 15\r\n\r\n{"name":"quan"}',
+    'HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 15\r\n\r\n{"name":"quan"}',
   );
   connector();
   server.close();
@@ -1016,7 +1016,7 @@ test('handleSocketRequest ctx.response.data 2', async () => {
   assert.equal(onData.mock.calls.length, 1);
   assert.equal(
     onData.mock.calls[0].arguments[0].toString(),
-    'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 15\r\n\r\n{"name":"quan"}',
+    'HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 15\r\n\r\n{"name":"quan"}',
   );
   connector();
   server.close();

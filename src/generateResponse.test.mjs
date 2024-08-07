@@ -83,7 +83,7 @@ test('generateResponse', () => {
   response = generateResponse(ctx);
   assert(Array.isArray(response.headers));
   assert.equal(response.body, JSON.stringify({ name: 'bbb' }));
-  assert(response.headers.includes('application/json'));
+  assert(response.headers.includes('application/json; charset=utf-8'));
   assert(!response.headers.includes('text/plain'));
   assert(!response.headers.includes('gzip'));
 
@@ -119,7 +119,7 @@ test('generateResponse gzip', () => {
   const response = generateResponse(ctx);
   assert.equal(response.statusCode, 200);
   assert(response.headers.includes('gzip'));
-  assert(response.headers.includes('application/json'));
+  assert(response.headers.includes('application/json; charset=utf-8'));
   assert.deepEqual(
     ctx.response.data,
     JSON.parse(zlib.unzipSync(response.body).toString()),
@@ -140,7 +140,7 @@ test('generateResponse data', () => {
   pass.destroy();
   const response = generateResponse(ctx);
   assert.equal(response.statusCode, 200);
-  assert(response.headers.includes('application/json'));
+  assert(response.headers.includes('application/json; charset=utf-8'));
   assert.deepEqual(
     {
       name: 'quan',
