@@ -28,7 +28,9 @@ export default ({
       await onRequest(ctx);
       assert(!ctx.signal.aborted);
     }
-    if (ctx.requestHandler === requestHandler) {
+    if (ctx.requestHandler !== requestHandler) {
+      ctx.routeMatched = null;
+    } else {
       ctx.request.params = ctx.routeMatched.urlMatch(ctx.request.pathname).params;
       if (ctx.routeMatched.query) {
         ctx.request.query = ctx.routeMatched.query(ctx.request.query);
@@ -41,7 +43,9 @@ export default ({
         await ctx.routeMatched.onPre(ctx);
         assert(!ctx.signal.aborted);
       }
-      if (!ctx.request.connection && ctx.requestHandler.validate) {
+      if (ctx.forward) {
+        // xxx ignore validate
+      } else if (ctx.requestHandler.validate && !ctx.request.connection) {
         ctx.request.body = new PassThrough();
         ctx.request.dataBuf = Buffer.from([]);
         wrapStreamRead({
@@ -52,9 +56,26 @@ export default ({
           },
         });
       }
-    } else {
-      ctx.routeMatched = null;
     }
+  },
+  onWebSocket: async ({ ctx, ...hooks }) => {
+    await ctx.requestHandler.fn(ctx);
+    if (!ctx.forward) {
+      throw createError(503);
+    }
+    assert(_.isPlainObject(ctx.forward));
+    await forwardWebsocket({
+      socket: ctx.socket,
+      signal: ctx.signal,
+      request: ctx.request,
+      ...hooks,
+      options: {
+        ...ctx.forward,
+        hostname: ctx.forward.hostname,
+        port: ctx.forward.port,
+        protocol: ctx.forward.protocol || 'http:',
+      },
+    });
   },
   onHttpResponse: async (ctx) => {
     if (ctx.response) {
@@ -94,20 +115,6 @@ export default ({
     if (ctx.routeMatched && ctx.routeMatched.onPost) {
       ctx.routeMatched.onPost(ctx);
     }
-  },
-  onWebSocket: async ({ ctx, ...hooks }) => {
-    await ctx.requestHandler.fn(ctx);
-    if (!ctx.forward) {
-      throw createError(503);
-    }
-    assert(_.isPlainObject(ctx.forward));
-    await forwardWebsocket({
-      socket: ctx.socket,
-      signal: ctx.signal,
-      request: ctx.request,
-      ...hooks,
-      options: ctx.forward,
-    });
   },
   onHttpError: (ctx) => {
     assert(ctx.error && ctx.error.response);
