@@ -5,6 +5,7 @@ import createError from 'http-errors';
 import {
   hasHttpBodyContent,
   decodeContentToJSON,
+  isWebSocketRequest,
 } from '@quanxiaoxiao/http-utils';
 import forwardWebsocket from '../forwardWebsocket.mjs';
 import readStream from '../readStream.mjs';
@@ -48,11 +49,13 @@ export default ({
         await ctx.routeMatched.onPre(ctx);
         assert(!ctx.signal.aborted);
       }
-      if (ctx.forward) {
-        if (hasHttpBodyContent(ctx.request.headers)) {
-          ctx.request.body = new PassThrough();
+      if (!isWebSocketRequest(ctx.request)) {
+        if (ctx.forward) {
+          if (hasHttpBodyContent(ctx.request.headers)) {
+            ctx.request.body = new PassThrough();
+          }
+          await attachRequestForward(ctx);
         }
-        await attachRequestForward(ctx);
       }
     }
   },
