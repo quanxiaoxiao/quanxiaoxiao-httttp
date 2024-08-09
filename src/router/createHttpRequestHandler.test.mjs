@@ -3,7 +3,6 @@ import assert from 'node:assert';
 import net from 'node:net';
 import request, { getSocketConnect } from '@quanxiaoxiao/http-request';
 import { waitFor } from '@quanxiaoxiao/utils';
-import readStream from '../readStream.mjs';
 import handleSocketRequest from '../handleSocketRequest.mjs';
 import generateRouteMatchList from './generateRouteMatchList.mjs';
 import createHttpRequestHandler from './createHttpRequestHandler.mjs';
@@ -30,8 +29,8 @@ test('createHttpRequestHandler', async () => {
       },
       post: async (ctx) => {
         if (ctx.request.body) {
-          const buf = await readStream(ctx.request.body, ctx.signal);
-          assert.equal(buf.toString(), 'abcd');
+          assert(Buffer.isBuffer(ctx.request.body));
+          assert.equal(ctx.request.body.toString(), 'abcd');
           ctx.response = {
             body: 'ccc',
           };
@@ -220,8 +219,7 @@ test('createHttpRequestHandler forwardRequest', async () => {
       },
       post: (ctx) => {
         assert(!ctx.response);
-        assert(ctx.request.body.writableEnded);
-        assert(!ctx.request.body.readableEnded);
+        assert(Buffer.isBuffer(ctx.request.body));
         ctx.response = {
           body: 'aaa1',
         };
@@ -454,6 +452,168 @@ test('createHttpRequestHandler forwardRequest', async () => {
     JSON.parse(ret.body),
     { name: 'quan2' },
   );
+  server1.close();
+  server2.close();
+});
+
+test('createHttpRequestHandler forward  post', async () => {
+  const port1 = getPort();
+  const port2 = getPort();
+  const routeMatchList1 = generateRouteMatchList({
+    '/sunlandapi/post/1': {
+      onPre: (ctx) => {
+        ctx.forward = {
+          port: port2,
+          path: '/post/1',
+        };
+      },
+      post: () => {},
+    },
+  });
+  const routeMatchList2 = generateRouteMatchList({
+    '/post/1': {
+      post: (ctx) => {
+        ctx.response = {
+          body: 'ok',
+        };
+      },
+    },
+  });
+  const server1 = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      ...createHttpRequestHandler({
+        list: routeMatchList1,
+      }),
+    });
+  });
+  server1.listen(port1);
+  const server2 = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      ...createHttpRequestHandler({
+        list: routeMatchList2,
+      }),
+    });
+  });
+  server2.listen(port2);
+  await waitFor(100);
+  const ret = await request(
+    {
+      path: '/sunlandapi/post/1',
+      method: 'POST',
+      body: 'aaa',
+    },
+    () => getSocketConnect({ port: port1 }),
+  );
+  assert.equal(ret.statusCode, 200);
+  assert.equal(ret.body.toString(), 'ok');
+  server1.close();
+  server2.close();
+});
+
+test('createHttpRequestHandler forward headers', async () => {
+  const port1 = getPort();
+  const port2 = getPort();
+  const routeMatchList1 = generateRouteMatchList({
+    '/post/1': {
+      onPre: (ctx) => {
+        ctx.forward = {
+          port: port2,
+        };
+      },
+      post: () => {},
+    },
+    '/post/2': {
+      post: (ctx) => {
+        ctx.forward = {
+          path: '/post2/1',
+          port: port2,
+        };
+      },
+    },
+  });
+  const routeMatchList2 = generateRouteMatchList({
+    '/post/1': {
+      post: async (ctx) => {
+        assert.equal(ctx.request.body.toString(), 'aaa1');
+        assert.deepEqual(
+          ctx.request.headers,
+          {
+            name: 'quan1',
+            host: `127.0.0.1:${port2}`,
+            'content-length': 4,
+          },
+        );
+        await waitFor(1000);
+        ctx.response = {
+          statusCode: 201,
+          headers: {
+            Server: 'quan',
+          },
+          body: 'ok1',
+        };
+      },
+    },
+    '/post2/1': {
+      post: async (ctx) => {
+        await waitFor(1000);
+        ctx.response = {
+          statusCode: 202,
+          headers: {
+            Server: 'quan2',
+          },
+          body: 'ok2',
+        };
+      },
+    },
+  });
+  const server1 = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      ...createHttpRequestHandler({
+        list: routeMatchList1,
+      }),
+    });
+  });
+  server1.listen(port1);
+  const server2 = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      ...createHttpRequestHandler({
+        list: routeMatchList2,
+      }),
+    });
+  });
+  server2.listen(port2);
+  await waitFor(100);
+  let ret
+  ret = await request(
+    {
+      path: '/post/1',
+      method: 'POST',
+      headers: {
+        name: 'quan1',
+      },
+      body: 'aaa1',
+    },
+    () => getSocketConnect({ port: port1 }),
+  );
+  assert.equal(ret.body.toString(), 'ok1');
+  assert.equal(ret.statusCode, 201);
+  ret = await request(
+    {
+      path: '/post/2',
+      method: 'POST',
+      headers: {
+        name: 'quan2',
+      },
+      body: 'aaa2',
+    },
+    () => getSocketConnect({ port: port1 }),
+  );
+  assert.equal(ret.body.toString(), 'ok2');
+  assert.equal(ret.statusCode, 202);
   server1.close();
   server2.close();
 });

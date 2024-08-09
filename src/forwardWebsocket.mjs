@@ -32,6 +32,9 @@ export default async ({
       1000 * 10,
       signal,
     );
+    if (options.onConnect) {
+      options.onConnect();
+    }
   } catch (error) {
     console.warn(error);
     throw createError(502);
@@ -50,7 +53,12 @@ export default async ({
       timeout: 1000 * 50,
       onError,
       onClose,
-      onIncoming: onChunkIncoming,
+      onIncoming: (chunk) => {
+         onChunkIncoming(chunk);
+        if (options.onChunkIncoming) {
+          options.onChunkIncoming(chunk);
+        }
+      },
       onOutgoing: (chunk) => {
         decode(chunk)
           .then(
@@ -58,6 +66,9 @@ export default async ({
             () => {},
           );
         onChunkOutgoing(chunk);
+        if (options.onChunkOutgoing) {
+          options.onChunkOutgoing(chunk);
+        }
       },
       onConnect: () => {
         const chunkRequest = encodeHttp(

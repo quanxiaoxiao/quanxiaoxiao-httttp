@@ -84,10 +84,11 @@ export default ({
         if (ctx.request.end) {
           if (!ctx.request.body.writableEnded) {
             ctx.request.end();
-          }
-          if (ctx.requestHandler.validate && ctx.request.body.readable) {
             const buf = await readStream(ctx.request.body, ctx.signal);
-            ctx.request.data = decodeContentToJSON(buf, ctx.request.headers);
+            ctx.request.body = buf;
+          }
+          if (ctx.requestHandler.validate && Buffer.isBuffer(ctx.request.body)) {
+            ctx.request.data = decodeContentToJSON(ctx.request.body, ctx.request.headers);
           }
         }
         if (ctx.requestHandler.validate && !ctx.requestHandler.validate(ctx.request.data)) {
@@ -104,6 +105,14 @@ export default ({
   },
   onHttpResponse: async (ctx) => {
     if (!ctx.response && ctx.requestForward) {
+      if (ctx.requestForward.timeOnResponseHeader == null) {
+        await new Promise((resolve) => {
+          ctx.requestForward.promise(() => {
+            resolve();
+          });
+        });
+        assert(!ctx.signal.aborted);
+      }
       ctx.response = {
         ...ctx.requestForward.response,
       };

@@ -446,10 +446,15 @@ export default ({
             doResponseError(state.ctx);
           }
           if (!controller.signal.aborted) {
-            if (ctx.request.end && !ctx.request.body.writableEnded) {
+            if (ctx.request.end
+              && ctx.request.body instanceof Writable
+              && !ctx.request.body.writableEnded) {
               state.currentStep = HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME;
             }
-            if (!ctx.response && ctx.request.end) {
+            if (!ctx.response
+              && ctx.request.end
+              && state.currentStep === HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME
+            ) {
               if (!ctx.request.body.writableEnded) {
                 ctx.request.end(() => {
                   doHttpRequestComplete(ctx);
