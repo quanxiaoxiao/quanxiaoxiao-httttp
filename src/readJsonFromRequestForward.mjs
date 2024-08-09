@@ -8,7 +8,7 @@ export default async (ctx) => {
     && ctx.requestForward.response.body.readable
   ) {
     const buf = await readStream(ctx.requestForward.response.body, ctx.signal);
-    if (ctx.requestForward.response.statusCode >= 200 && ctx.requestForward.statusCode <= 299) {
+    if (ctx.requestForward.response.statusCode >= 200 && ctx.requestForward.response.statusCode <= 299) {
       try {
         const data = decodeContentToJSON(
           buf,

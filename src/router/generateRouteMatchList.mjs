@@ -21,7 +21,7 @@ export default (routes) => {
     try {
       const routeItem = {
         pathname,
-        urlMatch: match(pathname, { encode: false }),
+        urlMatch: match(pathname, { encode: false, decode: false }),
         match: d.match ? compare(d.match) : null,
         meta: d,
       };
