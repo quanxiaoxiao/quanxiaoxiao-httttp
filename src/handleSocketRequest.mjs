@@ -4,7 +4,6 @@ import {
   Readable,
   Writable,
 } from 'node:stream';
-import _ from 'lodash';
 import createError from 'http-errors';
 import { createConnector } from '@quanxiaoxiao/socket';
 import {
@@ -29,11 +28,13 @@ import {
   HTTP_STEP_REQUEST_END,
   HTTP_STEP_RESPONSE_WAIT,
   HTTP_STEP_RESPONSE_START,
+  HTTP_STEP_REQUEST_COMPLETE,
   HTTP_STEP_RESPONSE_HEADER_SPEND,
   HTTP_STEP_RESPONSE_READ_CONTENT_CHUNK,
   HTTP_STEP_RESPONSE_READ_CONTENT_END,
   HTTP_STEP_RESPONSE_END,
   HTTP_STEP_RESPONSE_ERROR,
+  HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME,
   HTTP_STEP_REQUEST_WEBSOCKET_CONNECTION,
 } from './constants.mjs';
 import attachResponseError from './attachResponseError.mjs';
@@ -57,8 +58,6 @@ export default ({
   onHttpResponse,
   onHttpResponseEnd,
   onHttpError,
-  onChunkIncoming,
-  onChunkOutgoing,
   onSocketClose,
 }) => {
   const controller = new AbortController();
@@ -80,15 +79,6 @@ export default ({
   const doOutgoning = (chunk, ctx) => {
     const size = chunk.length;
     if (!controller.signal.aborted && size > 0) {
-      if (onChunkOutgoing) {
-        promisess(onChunkOutgoing, ctx, chunk)
-          .then(
-            () => {},
-            (error) => {
-              console.error(error);
-            },
-          );
-      }
       try {
         const ret = state.connector.write(chunk);
         state.bytesOutgoing += size;
@@ -235,7 +225,10 @@ export default ({
   const doHttpRequestComplete = (ctx) => {
     assert(!controller.signal.aborted);
     assert(ctx.error == null);
-    if (state.currentStep === HTTP_STEP_REQUEST_END) {
+    assert(state.currentStep < HTTP_STEP_REQUEST_COMPLETE);
+    state.currentStep = HTTP_STEP_REQUEST_COMPLETE;
+    if (state.currentStep === HTTP_STEP_REQUEST_COMPLETE
+      || state.currentStep === HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME) {
       if (onHttpResponse) {
         state.currentStep = HTTP_STEP_RESPONSE_WAIT;
         promisess(onHttpResponse, ctx)
@@ -374,27 +367,6 @@ export default ({
               if (ctx.request.timeOnBody == null) {
                 ctx.response.timeOnBody = state.timeOnLastIncoming;
               }
-              if (onChunkIncoming) {
-                promisess(onChunkIncoming, state.ctx, chunk)
-                  .then(
-                    () => {},
-                    (error) => {
-                      console.error(error);
-                    },
-                  );
-              }
-            },
-            onChunkOutgoing: (chunk) => {
-              state.bytesOutgoing += chunk.length;
-              if (onChunkOutgoing) {
-                promisess(onChunkOutgoing, state.ctx, chunk)
-                  .then(
-                    () => {},
-                    (error) => {
-                      console.error(error);
-                    },
-                  );
-              }
             },
           });
         } else {
@@ -420,34 +392,27 @@ export default ({
                   doResponseError(ctx);
                 }
               },
-              onEnd: () => {
-                doHttpRequestComplete(ctx);
-              },
             });
+            ctx.request.end = (fn) => {
+              if (fn == null) {
+                ctx.request._write();
+              } else {
+                const type = typeof fn;
+                if (type === 'string' || Buffer.isBuffer(fn)) {
+                  ctx.request._write(type == 'string' ? Buffer.from(fn, 'utf8') : fn);
+                  ctx.request._write();
+                } else if (type === 'function') {
+                  ctx.request._write(fn);
+                } else {
+                  ctx.request._write();
+                }
+              }
+            };
           } else if (ctx.request.body != null) {
-            if (ctx.request.body instanceof Readable && !ctx.request.body.destroyed) {
+            if (ctx.request.body instanceof Writable && !ctx.request.body.destroyed) {
               ctx.request.body.destroy();
             }
             ctx.request.body = null;
-          }
-          if (ctx.response) {
-            assert(_.isPlainObject(ctx.response));
-            state.currentStep = HTTP_STEP_RESPONSE_WAIT;
-            if (onHttpResponse) {
-              promisess(onHttpResponse, ctx)
-                .then(
-                  () => {
-                    if (!controller.signal.aborted) {
-                      doResponse(ctx);
-                    }
-                  },
-                  (error) => {
-                    handleHttpError(error, ctx);
-                  },
-                );
-            } else {
-              doResponse(ctx);
-            }
           }
         }
       },
@@ -480,8 +445,17 @@ export default ({
             doResponseError(state.ctx);
           }
           if (!controller.signal.aborted) {
-            if (ctx.request._write) {
-              ctx.request._write();
+            if (ctx.request.end && !ctx.request.body.writableEnded) {
+              state.currentStep = HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME;
+            }
+            if (!ctx.response && ctx.request.end) {
+              if (!ctx.request.body.writableEnded) {
+                ctx.request.end(() => {
+                  doHttpRequestComplete(ctx);
+                });
+              } else {
+                doHttpRequestComplete(ctx);
+              }
             } else {
               doHttpRequestComplete(ctx);
             }
@@ -496,8 +470,7 @@ export default ({
     state.timeOnLastIncoming = performance.now();
     state.bytesIncoming += chunk.length;
     if (state.currentStep >= HTTP_STEP_REQUEST_END
-      && state.currentStep !== HTTP_STEP_RESPONSE_END
-      && state.currentStep !== HTTP_STEP_RESPONSE_WAIT) {
+      && state.currentStep !== HTTP_STEP_RESPONSE_END) {
       handleHttpError(createError(400), state.ctx);
     } else {
       if (state.currentStep === HTTP_STEP_EMPTY || state.currentStep === HTTP_STEP_RESPONSE_END) {
@@ -521,15 +494,6 @@ export default ({
         }
         bindExcute();
       }
-      if (onChunkIncoming) {
-        promisess(onChunkIncoming, state.ctx, chunk)
-          .then(
-            () => {},
-            (error) => {
-              console.error(error);
-            },
-          );
-      }
     }
   }
 
@@ -542,16 +506,13 @@ export default ({
             () => {},
             (error) => {
               if (!controller.signal.aborted) {
-                if (state.ctx) {
+                if (error instanceof DecodeHttpError) {
+                  shutdown(error);
+                } else {
                   if (state.ctx.error == null) {
                     state.ctx.error = error;
-                    if (error instanceof DecodeHttpError) {
-                      state.ctx.error.statusCode = 400;
-                    }
                   }
                   doResponseError(state.ctx);
-                } else {
-                  shutdown(error);
                 }
               } else {
                 shutdown(state.ctx?.error);

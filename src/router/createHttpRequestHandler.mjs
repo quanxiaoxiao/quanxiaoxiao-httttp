@@ -1,10 +1,14 @@
 import assert from 'node:assert';
-import { Readable, PassThrough } from 'node:stream';
+import { PassThrough, Readable } from 'node:stream';
 import _ from 'lodash';
-import { decodeContentToJSON } from '@quanxiaoxiao/http-utils';
-import { wrapStreamRead } from '@quanxiaoxiao/node-utils';
 import createError from 'http-errors';
+import {
+  hasHttpBodyContent,
+  decodeContentToJSON,
+} from '@quanxiaoxiao/http-utils';
 import forwardWebsocket from '../forwardWebsocket.mjs';
+import readStream from '../readStream.mjs';
+import attachRequestForward from './attachRequestForward.mjs';
 
 export default ({
   list: routeMatchList,
@@ -27,10 +31,17 @@ export default ({
     if (onRequest) {
       await onRequest(ctx);
       assert(!ctx.signal.aborted);
+      /*
+      if (ctx.response) {
+        ctx.routeMatched = null;
+        ctx.requestHandler = null;
+      }
+      */
+      if (ctx.requestHandler !== requestHandler) {
+        ctx.routeMatched = null;
+      }
     }
-    if (ctx.requestHandler !== requestHandler) {
-      ctx.routeMatched = null;
-    } else {
+    if (ctx.routeMatched) {
       ctx.request.params = ctx.routeMatched.urlMatch(ctx.request.pathname).params;
       if (ctx.routeMatched.query) {
         ctx.request.query = ctx.routeMatched.query(ctx.request.query);
@@ -38,23 +49,15 @@ export default ({
       if (ctx.routeMatched.match && !ctx.routeMatched.match(ctx.request)) {
         throw createError(400);
       }
-
       if (ctx.socket.writable && ctx.routeMatched.onPre) {
         await ctx.routeMatched.onPre(ctx);
         assert(!ctx.signal.aborted);
       }
       if (ctx.forward) {
-        // xxx ignore validate
-      } else if (ctx.requestHandler.validate && !ctx.request.connection) {
-        ctx.request.body = new PassThrough();
-        ctx.request.dataBuf = Buffer.from([]);
-        wrapStreamRead({
-          signal: ctx.signal,
-          stream: ctx.request.body,
-          onData: (chunk) => {
-            ctx.request.dataBuf = Buffer.concat([ctx.request.dataBuf, chunk]);
-          },
-        });
+        if (hasHttpBodyContent(ctx.request.headers)) {
+          ctx.request.body = new PassThrough();
+        }
+        await attachRequestForward(ctx);
       }
     }
   },
@@ -77,37 +80,47 @@ export default ({
       },
     });
   },
-  onHttpResponse: async (ctx) => {
-    if (ctx.response) {
-      if (ctx.response.promise) {
-        await new Promise((resolve, reject) => {
-          ctx.response.promise(() => {
-            if (ctx.error || ctx.signal.aborted) {
-              reject(ctx.error);
-            } else {
-              resolve();
-            }
-          });
-        });
-      }
-      if (ctx.error) {
-        throw createError(500);
-      }
-    } else if (ctx.requestHandler.validate) {
-      ctx.request.data = decodeContentToJSON(ctx.request.dataBuf, ctx.request.headers);
-      if (!ctx.requestHandler.validate(ctx.request.data)) {
-        throw createError(400, JSON.stringify(ctx.requestHandler.validate.errors));
+  onHttpRequestEnd: async (ctx) => {
+    if (!ctx.request.connection) {
+      if (!ctx.forward) {
+        if (ctx.request.end) {
+          ctx.request.end();
+          if (ctx.requestHandler && ctx.requestHandler.validate) {
+            const buf = await readStream(ctx.request.body, ctx.signal);
+            ctx.request.data = decodeContentToJSON(buf, ctx.request.headers);
+          }
+        }
+        if (ctx.requestHandler
+          && ctx.requestHandler.validate
+          && !ctx.requestHandler.validate(ctx.request.data)) {
+          throw createError(400, JSON.stringify(ctx.requestHandler.validate.errors));
+        }
+        await ctx.requestHandler.fn(ctx);
+        if (!ctx.response && ctx.forward) {
+          await attachRequestForward(ctx);
+        }
+      } else {
+        await ctx.requestHandler.fn(ctx);
       }
     }
-    await ctx.requestHandler.fn(ctx);
-    assert(!ctx.signal.aborted);
+  },
+  onHttpResponse: async (ctx) => {
+    if (!ctx.response && ctx.requestForward) {
+      ctx.response = {
+        ...ctx.requestForward.response,
+      };
+    }
     if (!ctx.response) {
       console.warn(`${ctx.request.method} ${ctx.request.path} ctx.response unconfig`);
       throw createError(503);
     }
-    if (ctx.routeMatched
-      && ctx.routeMatched.select
-      && !(ctx.response.body instanceof Readable)) {
+    if (ctx.routeMatched && ctx.routeMatched.select) {
+      if (!Object.hasOwnProperty.call(ctx.response, 'data')) {
+        if (ctx.response.body instanceof Readable) {
+          const buf = await readStream(ctx.response.body, ctx.signal);
+          ctx.response.data = decodeContentToJSON(buf, ctx.response.headers);
+        }
+      }
       ctx.response.data = ctx.routeMatched.select(ctx.response.data);
     }
   },
@@ -118,11 +131,14 @@ export default ({
   },
   onHttpError: (ctx) => {
     assert(ctx.error && ctx.error.response);
-    const message = `$$${ctx.request.method} ${ctx.request.path} ${ctx.error.response.statusCode} ${ctx.error.message}`;
-    if (logger) {
+    let message = ctx.error.message;
+    if (ctx.request.method) {
+      message = `${ctx.request.method} ${ctx.request.path} ${ctx.error.response.statusCode} \`${ctx.error.message}\``;
+    }
+    if (logger && logger.warn) {
       logger.warn(message);
     } else {
-      console.warn(message);
+      // console.warn(message);
     }
     if (ctx.error.response.statusCode >= 500 && ctx.error.response.statusCode <= 599) {
       console.error(ctx.error);
