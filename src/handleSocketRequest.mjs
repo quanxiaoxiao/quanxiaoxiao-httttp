@@ -361,6 +361,9 @@ export default ({
                 }
               });
             },
+            onChunkOutgoing: (chunk) => {
+              state.bytesOutgoing += chunk.length;
+            },
             onChunkIncoming: (chunk) => {
               state.timeOnLastIncoming = performance.now();
               state.bytesIncoming += chunk.length;

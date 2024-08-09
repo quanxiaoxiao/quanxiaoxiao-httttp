@@ -82,6 +82,9 @@ export default async ({
         );
         remoteSocket.write(chunkRequest);
         onChunkOutgoing(chunkRequest);
+        if (options.onChunkOutgoing) {
+          options.onChunkOutgoing(chunkRequest);
+        }
         process.nextTick(() => {
           if (!signal.aborted) {
             onConnect();
