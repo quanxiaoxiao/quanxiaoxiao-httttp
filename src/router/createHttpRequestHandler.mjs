@@ -85,7 +85,7 @@ export default ({
           if (!ctx.request.body.writableEnded) {
             ctx.request.end();
           }
-          if (ctx.requestHandler.validate && !ctx.request.body.readableEnded) {
+          if (ctx.requestHandler.validate && ctx.request.body.readable) {
             const buf = await readStream(ctx.request.body, ctx.signal);
             ctx.request.data = decodeContentToJSON(buf, ctx.request.headers);
           }
@@ -114,9 +114,15 @@ export default ({
     }
     if (ctx.routeMatched && ctx.routeMatched.select) {
       if (!Object.hasOwnProperty.call(ctx.response, 'data')) {
-        if (ctx.response.body instanceof Readable && !ctx.response.body.readableEnded) {
-          const buf = await readStream(ctx.response.body, ctx.signal);
-          ctx.response.data = decodeContentToJSON(buf, ctx.response.headers);
+        if (ctx.response.body instanceof Readable
+          && ctx.response.body.readable
+        ) {
+          if (ctx.response.headers && ctx.response.headers['content-length'] === 0) {
+            ctx.response.data = null;
+          } else {
+            const buf = await readStream(ctx.response.body, ctx.signal);
+            ctx.response.data = decodeContentToJSON(buf, ctx.response.headers);
+          }
         }
       }
       ctx.response.data = ctx.routeMatched.select(ctx.response.data);
@@ -136,7 +142,7 @@ export default ({
     if (logger && logger.warn) {
       logger.warn(message);
     } else {
-      // console.warn(message);
+      console.warn(message);
     }
     if (ctx.error.response.statusCode >= 500 && ctx.error.response.statusCode <= 599) {
       console.error(ctx.error);

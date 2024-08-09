@@ -180,6 +180,35 @@ test('createHttpRequestHandler forwardRequest', async () => {
   const port1 = getPort();
   const port2 = getPort();
   const routeMatchList1 = generateRouteMatchList({
+    '/select/1': {
+      select: {
+        type: 'object',
+        properties: {
+          name: ['.foo', { type: 'string' }],
+        },
+      },
+      get: (ctx) => {
+        ctx.response = {
+          data: {
+            foo: 'quan1',
+          },
+        };
+      },
+    },
+    '/select/forward/1': {
+      select: {
+        type: 'object',
+        properties: {
+          name: ['.foo', { type: 'string' }],
+        },
+      },
+      get: (ctx) => {
+        ctx.forward = {
+          path: '/select/ss',
+          port: port2,
+        };
+      },
+    },
     '/forward/1': {
       onPre: (ctx) => {
         if (ctx.request.method === 'GET') {
@@ -259,6 +288,15 @@ test('createHttpRequestHandler forwardRequest', async () => {
             Server: 'quan',
           },
           body: 'aa',
+        };
+      },
+    },
+    '/select/ss': {
+      get: (ctx) => {
+        ctx.response = {
+          data: {
+            foo: 'quan2',
+          },
         };
       },
     },
@@ -393,6 +431,28 @@ test('createHttpRequestHandler forwardRequest', async () => {
   assert.deepEqual(
     JSON.parse(ret.body),
     { ss: 'big' },
+  );
+  ret = await request(
+    {
+      path: '/select/1',
+    },
+    () => getSocketConnect({ port: port1 }),
+  );
+  assert.equal(ret.statusCode, 200);
+  assert.deepEqual(
+    JSON.parse(ret.body),
+    { name: 'quan1' },
+  );
+  ret = await request(
+    {
+      path: '/select/forward/1',
+    },
+    () => getSocketConnect({ port: port1 }),
+  );
+  assert.equal(ret.statusCode, 200);
+  assert.deepEqual(
+    JSON.parse(ret.body),
+    { name: 'quan2' },
   );
   server1.close();
   server2.close();

@@ -20,8 +20,15 @@ export default (ctx) => {
     body: ctx.response.body ?? null,
   };
   if (ctx.response.body instanceof Readable) {
-    assert(!ctx.response.body.readable);
-    assert(Object.hasOwnProperty.call(ctx.response, 'data'));
+    if (ctx.response.headers && ctx.response.headers['content-length'] === 0) {
+      if (!ctx.response.body.destroyed) {
+        ctx.response.body.destroy();
+      }
+      response.body = null;
+    } else {
+      assert(!ctx.response.body.readable);
+      assert(Object.hasOwnProperty.call(ctx.response, 'data'));
+    }
   }
   if (STATUS_CODES[response.statusCode]) {
     response.statusText = STATUS_CODES[response.statusCode];

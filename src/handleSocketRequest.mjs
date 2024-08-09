@@ -157,6 +157,7 @@ export default ({
     if (ctx.response
       && ctx.response.body instanceof Readable
       && ctx.response.body.readable
+      && (!ctx.response.headers || ctx.response.headers['content-length'] !== 0)
     ) {
       assert(!Object.hasOwnProperty.call(ctx.response, 'data'));
       const encodeHttpResponse = encodeHttp({
