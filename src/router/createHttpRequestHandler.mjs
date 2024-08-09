@@ -31,14 +31,9 @@ export default ({
     if (onRequest) {
       await onRequest(ctx);
       assert(!ctx.signal.aborted);
-      /*
       if (ctx.response) {
         ctx.routeMatched = null;
         ctx.requestHandler = null;
-      }
-      */
-      if (ctx.requestHandler !== requestHandler) {
-        ctx.routeMatched = null;
       }
     }
     if (ctx.routeMatched) {
@@ -62,6 +57,9 @@ export default ({
     }
   },
   onWebSocket: async ({ ctx, ...hooks }) => {
+    if (!ctx.requestHandler) {
+      throw createError(404);
+    }
     await ctx.requestHandler.fn(ctx);
     if (!ctx.forward) {
       throw createError(503);
@@ -81,22 +79,22 @@ export default ({
     });
   },
   onHttpRequestEnd: async (ctx) => {
-    if (!ctx.request.connection) {
+    if (ctx.requestHandler && !ctx.request.connection) {
       if (!ctx.forward) {
         if (ctx.request.end) {
-          ctx.request.end();
-          if (ctx.requestHandler && ctx.requestHandler.validate) {
+          if (!ctx.request.body.writableEnded) {
+            ctx.request.end();
+          }
+          if (ctx.requestHandler.validate && !ctx.request.body.readableEnded) {
             const buf = await readStream(ctx.request.body, ctx.signal);
             ctx.request.data = decodeContentToJSON(buf, ctx.request.headers);
           }
         }
-        if (ctx.requestHandler
-          && ctx.requestHandler.validate
-          && !ctx.requestHandler.validate(ctx.request.data)) {
+        if (ctx.requestHandler.validate && !ctx.requestHandler.validate(ctx.request.data)) {
           throw createError(400, JSON.stringify(ctx.requestHandler.validate.errors));
         }
         await ctx.requestHandler.fn(ctx);
-        if (!ctx.response && ctx.forward) {
+        if (ctx.forward) {
           await attachRequestForward(ctx);
         }
       } else {
@@ -116,7 +114,7 @@ export default ({
     }
     if (ctx.routeMatched && ctx.routeMatched.select) {
       if (!Object.hasOwnProperty.call(ctx.response, 'data')) {
-        if (ctx.response.body instanceof Readable) {
+        if (ctx.response.body instanceof Readable && !ctx.response.body.readableEnded) {
           const buf = await readStream(ctx.response.body, ctx.signal);
           ctx.response.data = decodeContentToJSON(buf, ctx.response.headers);
         }
