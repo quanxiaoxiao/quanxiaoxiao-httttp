@@ -1,5 +1,9 @@
 import assert from 'node:assert';
-import { PassThrough, Readable } from 'node:stream';
+import {
+  PassThrough,
+  Readable,
+  Writable,
+} from 'node:stream';
 import _ from 'lodash';
 import createError from 'http-errors';
 import {
@@ -49,13 +53,11 @@ export default ({
         await ctx.routeMatched.onPre(ctx);
         assert(!ctx.signal.aborted);
       }
-      if (!isWebSocketRequest(ctx.request)) {
-        if (ctx.forward) {
-          if (hasHttpBodyContent(ctx.request.headers)) {
-            ctx.request.body = new PassThrough();
-          }
-          await attachRequestForward(ctx);
+      if (!isWebSocketRequest(ctx.request) && ctx.forward) {
+        if (hasHttpBodyContent(ctx.request.headers)) {
+          ctx.request.body = new PassThrough();
         }
+        await attachRequestForward(ctx);
       }
     }
   },
@@ -82,16 +84,26 @@ export default ({
     });
   },
   onHttpRequestEnd: async (ctx) => {
-    if (ctx.requestHandler && !ctx.request.connection) {
-      if (!ctx.forward) {
+    if (!ctx.request.connection && ctx.requestHandler) {
+      if (ctx.forward) {
+        assert(ctx.requestForward);
+        await ctx.requestHandler.fn(ctx);
+      } else {
         if (ctx.request.end) {
-          if (!ctx.request.body.writableEnded) {
+          if (ctx.request.body instanceof Writable && !ctx.request.body.writableEnded) {
             ctx.request.end();
-            const buf = await readStream(ctx.request.body, ctx.signal);
-            ctx.request.body = buf;
+            if (ctx.request.body instanceof Readable) {
+              const buf = await readStream(ctx.request.body, ctx.signal);
+              ctx.request.body = buf;
+            }
           }
           if (ctx.requestHandler.validate && Buffer.isBuffer(ctx.request.body)) {
-            ctx.request.data = decodeContentToJSON(ctx.request.body, ctx.request.headers);
+            try {
+              ctx.request.data = decodeContentToJSON(ctx.request.body, ctx.request.headers);
+            } catch (error) {
+              console.warn(error);
+              throw createError(400);
+            }
           }
         }
         if (ctx.requestHandler.validate && !ctx.requestHandler.validate(ctx.request.data)) {
@@ -101,8 +113,6 @@ export default ({
         if (ctx.forward) {
           await attachRequestForward(ctx);
         }
-      } else {
-        await ctx.requestHandler.fn(ctx);
       }
     }
   },
@@ -115,10 +125,16 @@ export default ({
           });
         });
         assert(!ctx.signal.aborted);
+        if (ctx.response == null) {
+          ctx.response = {
+            ...ctx.requestForward.response,
+          };
+        }
+      } else {
+        ctx.response = {
+          ...ctx.requestForward.response,
+        };
       }
-      ctx.response = {
-        ...ctx.requestForward.response,
-      };
     }
     if (!ctx.response) {
       console.warn(`${ctx.request.method} ${ctx.request.path} ctx.response unconfig`);
@@ -130,9 +146,11 @@ export default ({
           && ctx.response.body.readable
         ) {
           if (ctx.response.headers && ctx.response.headers['content-length'] === 0) {
+            ctx.response.body = null;
             ctx.response.data = null;
           } else {
             const buf = await readStream(ctx.response.body, ctx.signal);
+            ctx.response.body = buf;
             ctx.response.data = decodeContentToJSON(buf, ctx.response.headers);
           }
         }

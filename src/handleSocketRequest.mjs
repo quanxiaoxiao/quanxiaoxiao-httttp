@@ -458,7 +458,7 @@ export default ({
               && ctx.request.end
               && state.currentStep === HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME
             ) {
-              if (!ctx.request.body.writableEnded) {
+              if (ctx.request.body instanceof Writable && !ctx.request.body.writableEnded) {
                 ctx.request.end(() => {
                   doHttpRequestComplete(ctx);
                 });
