@@ -125,7 +125,8 @@ export default ({
     }
   }
 
-  function doResponseError(ctx) {
+  function doResponseError() {
+    const { ctx } = state;
     if (!controller.signal.aborted && state.currentStep !== HTTP_STEP_RESPONSE_END) {
       if (state.currentStep >= HTTP_STEP_RESPONSE_HEADER_SPEND) {
         shutdown(ctx.error);
@@ -137,9 +138,9 @@ export default ({
         } else {
           console.warn(ctx.error);
         }
+        const chunk = encodeHttp(ctx.error.response);
+        const size = chunk.length;
         try {
-          const chunk = encodeHttp(ctx.error.response);
-          const size = chunk.length;
           state.connector.end(chunk);
           updateTimeOnLastOutgoing();
           state.bytesOutgoing += size;
@@ -156,17 +157,18 @@ export default ({
     }
   }
 
-  const handleHttpError = (error, ctx) => {
+  function handleHttpError(error) {
     assert(error instanceof Error);
     if (!controller.signal.aborted) {
-      if (ctx.error == null) {
-        ctx.error = error;
+      if (state.ctx.error == null) {
+        state.ctx.error = error;
       }
-      doResponseError(ctx);
+      doResponseError();
     }
-  };
+  }
 
-  const doResponse = (ctx) => {
+  function doResponse() {
+    const { ctx } = state;
     assert(state.currentStep < HTTP_STEP_RESPONSE_START);
     state.currentStep = HTTP_STEP_RESPONSE_START;
     assert(ctx.error == null);
@@ -234,7 +236,7 @@ export default ({
         handleHttpError(error, ctx);
       }
     }
-  };
+  }
 
   function shutdown(error) {
     state.connector();
@@ -244,7 +246,8 @@ export default ({
     doSocketClose(error);
   }
 
-  function attachRequestBodyBackpress(ctx) {
+  function attachRequestBodyBackpress() {
+    const { ctx } = state;
     if (ctx.request.body == null) {
       ctx.request.body = new PassThrough();
     }
@@ -263,7 +266,7 @@ export default ({
           if (!ctx.error) {
             ctx.error = new Error(`request body stream, \`${error.message}\``);
           }
-          doResponseError(ctx);
+          doResponseError();
         }
       },
     });
@@ -284,10 +287,11 @@ export default ({
     };
   }
 
-  function doWebSocket(ctx) {
+  function doWebSocket() {
     if (!onWebSocket) {
       throw createError(501);
     }
+    const { ctx } = state;
     ctx.request.connection = true;
     state.currentStep = HTTP_STEP_REQUEST_WEBSOCKET_CONNECTION;
     state.execute = null;
@@ -353,7 +357,8 @@ export default ({
     });
   }
 
-  const doHttpRequestComplete = (ctx) => {
+  function doHttpRequestComplete() {
+    const { ctx } = state;
     assert(!controller.signal.aborted);
     assert(ctx.error == null);
     assert(state.currentStep < HTTP_STEP_REQUEST_COMPLETE);
@@ -370,16 +375,16 @@ export default ({
               }
             },
             (error) => {
-              handleHttpError(error, ctx);
+              handleHttpError(error);
             },
           );
       } else {
         doResponse(ctx);
       }
     }
-  };
+  }
 
-  const doSocketClose = (error) => {
+  function doSocketClose(error) {
     if (onSocketClose && !state.isSocketCloseEmit) {
       state.isSocketCloseEmit = true;
       const result = {
@@ -410,7 +415,7 @@ export default ({
       }
       onSocketClose(result);
     }
-  };
+  }
 
   const bindExcute = () => {
     const { ctx } = state;
@@ -452,9 +457,9 @@ export default ({
           assert(!controller.signal.aborted);
         }
         if (isWebSocketRequest(ctx.request)) {
-          doWebSocket(ctx);
+          doWebSocket();
         } else if (hasHttpBodyContent(ctx.request.headers)) {
-          attachRequestBodyBackpress(ctx);
+          attachRequestBodyBackpress();
         } else if (ctx.request.body != null) {
           if (ctx.request.body instanceof Writable && !ctx.request.body.destroyed) {
             ctx.request.body.destroy();
@@ -492,7 +497,7 @@ export default ({
           }
           if (ret.dataBuf.length > 0) {
             ctx.error = createError(400);
-            doResponseError(ctx);
+            doResponseError();
           }
           if (!controller.signal.aborted && !ctx.error) {
             if (!ctx.response
@@ -502,10 +507,10 @@ export default ({
             ) {
               state.currentStep = HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME;
               ctx.request.end(() => {
-                doHttpRequestComplete(ctx);
+                doHttpRequestComplete();
               });
             } else {
-              doHttpRequestComplete(ctx);
+              doHttpRequestComplete();
             }
           }
         }
@@ -518,7 +523,7 @@ export default ({
     state.bytesIncoming += chunk.length;
     if (state.currentStep >= HTTP_STEP_REQUEST_END
       && state.currentStep !== HTTP_STEP_RESPONSE_END) {
-      handleHttpError(createError(400), state.ctx);
+      handleHttpError(createError(400));
     } else if (state.currentStep === HTTP_STEP_EMPTY || state.currentStep === HTTP_STEP_RESPONSE_END) {
       assert(state.execute == null);
       if (state.currentStep === HTTP_STEP_EMPTY) {
@@ -560,7 +565,7 @@ export default ({
                     if (error instanceof DecodeHttpError) {
                       shutdown(error);
                     } else {
-                      doResponseError(state.ctx);
+                      doResponseError();
                     }
                   } else {
                     shutdown(state.ctx.error);
