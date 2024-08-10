@@ -2021,10 +2021,12 @@ test('handleSocketRequest ctx.response.body stream wait', async () => {
       body: responseBodyStream,
     };
     ctx.request.body = requestBodyStream;
-    assert.equal(onHttpResponse.mock.calls.length, 0);
   });
 
   const onSocketClose = mock.fn(() => {});
+  const onHttpRequestEnd = mock.fn(() => {
+    assert.equal(onHttpResponse.mock.calls.length, 0);
+  });
 
 
   const server = net.createServer((socket) => {
@@ -2032,6 +2034,7 @@ test('handleSocketRequest ctx.response.body stream wait', async () => {
       socket,
       onHttpError,
       onSocketClose,
+      onHttpRequestEnd,
       onHttpRequestHeader,
       onHttpResponseEnd,
       onHttpResponse,
@@ -2060,6 +2063,7 @@ test('handleSocketRequest ctx.response.body stream wait', async () => {
   state.connector.write(Buffer.from('POST /aaa HTTP/1.1\r\nContent-Length: 8\r\n\r\n11'));
   await waitFor(200);
   assert.equal(onData.mock.calls.length, 0);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 0);
   assert.equal(onHttpResponse.mock.calls.length, 0);
   assert.equal(handleRequestBodyOnData.mock.calls.length, 1);
   assert.equal(handleRequestBodyOnData.mock.calls[0].arguments[0].toString(), '11');
@@ -2072,8 +2076,9 @@ test('handleSocketRequest ctx.response.body stream wait', async () => {
   state.connector.write(Buffer.from('666666'));
   await waitFor(200);
   assert(onData.mock.calls.length >= 1);
+  assert.equal(onHttpRequestEnd.mock.calls.length, 1);
   assert.equal(
-    onData.mock.calls[0].arguments[0].toString(),
+    Buffer.concat(onData.mock.calls.map((d) => d.arguments[0])),
     'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n8\r\nresponse\r\n',
   );
   assert.equal(onHttpResponse.mock.calls.length, 1);

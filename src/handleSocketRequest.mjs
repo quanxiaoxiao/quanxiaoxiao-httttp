@@ -96,11 +96,14 @@ export default ({
     return false;
   }
 
-  const doResponseEnd = () => {
+  function doResponseEnd() {
     assert(state.ctx != null);
     assert(state.currentStep < HTTP_STEP_RESPONSE_END);
+    assert(state.ctx.response);
+    assert(state.ctx.request);
     if (!controller.signal.aborted) {
       state.currentStep = HTTP_STEP_RESPONSE_END;
+      state.ctx.response.timeOnEnd = calcTime(state.ctx);
       state.execute = null;
       if (onHttpResponseEnd) {
         try {
@@ -110,9 +113,9 @@ export default ({
         }
       }
     }
-  };
+  }
 
-  const doResponseError = (ctx) => {
+  function doResponseError(ctx) {
     if (!controller.signal.aborted && state.currentStep !== HTTP_STEP_RESPONSE_END) {
       if (state.currentStep >= HTTP_STEP_RESPONSE_HEADER_SPEND) {
         shutdown(ctx.error);
@@ -140,7 +143,7 @@ export default ({
     } else {
       shutdown(ctx.error);
     }
-  };
+  }
 
   const handleHttpError = (error, ctx) => {
     assert(error instanceof Error);
@@ -512,35 +515,33 @@ export default ({
     }
   }
 
-  function handleDataOnSocket (chunk) {
-    if (chunk.length > 0) {
-      checkRequestChunkValid(chunk);
-      if (!controller.signal.aborted) {
-        state.execute(chunk)
-          .then(
-            () => {},
-            (error) => {
-              if (!controller.signal.aborted) {
-                if (error instanceof DecodeHttpError) {
-                  shutdown(error);
-                } else {
+  state.connector = createConnector(
+    {
+      onData: (chunk) => {
+        if (chunk.length > 0) {
+          checkRequestChunkValid(chunk);
+          if (!controller.signal.aborted) {
+            state.execute(chunk)
+              .then(
+                () => {},
+                (error) => {
                   if (state.ctx.error == null) {
                     state.ctx.error = error;
                   }
-                  doResponseError(state.ctx);
-                }
-              } else {
-                shutdown(state.ctx?.error);
-              }
-            },
-          );
-      }
-    }
-  }
-
-  state.connector = createConnector(
-    {
-      onData: handleDataOnSocket,
+                  if (!controller.signal.aborted) {
+                    if (error instanceof DecodeHttpError) {
+                      shutdown(error);
+                    } else {
+                      doResponseError(state.ctx);
+                    }
+                  } else {
+                    shutdown(state.ctx.error);
+                  }
+                },
+              );
+          }
+        }
+      },
       onDrain: () => {
         if (state.ctx
           && state.ctx.response
@@ -554,6 +555,7 @@ export default ({
         assert(!controller.signal.aborted);
         controller.abort();
         if (state.currentStep !== HTTP_STEP_RESPONSE_END && state.currentStep !== HTTP_STEP_EMPTY) {
+          assert(state.ctx);
           const error = new Error('Socket Close Error');
           if (!state.ctx.error) {
             state.ctx.error = error;
