@@ -461,29 +461,8 @@ export default ({
             doResponseError(ctx);
           }
           if (!controller.signal.aborted && !ctx.error) {
-            if (ctx.request.end
-              && ctx.request.body instanceof Writable
-              && !ctx.request.body.writableEnded) {
-              state.currentStep = HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME;
-            }
             if (!ctx.response
               && ctx.request.end
-              && state.currentStep === HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME
-            ) {
-              if (ctx.request.body instanceof Writable && !ctx.request.body.writableEnded) {
-                ctx.request.end(() => {
-                  doHttpRequestComplete(ctx);
-                });
-              } else {
-                doHttpRequestComplete(ctx);
-              }
-            } else {
-              doHttpRequestComplete(ctx);
-            }
-            /*
-            if (!ctx.response
-              && ctx.request.end
-              && state.currentStep === HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME
               && ctx.request.body instanceof Writable
               && !ctx.request.body.writableEnded
             ) {
@@ -494,7 +473,6 @@ export default ({
             } else {
               doHttpRequestComplete(ctx);
             }
-            */
           }
         }
       },
