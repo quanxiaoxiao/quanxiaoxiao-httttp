@@ -185,9 +185,14 @@ export default ({
               const chunk = encodeHttpResponse();
               state.currentStep = HTTP_STEP_RESPONSE_READ_CONTENT_END;
               doOutgoning(chunk);
-              doResponseEnd();
+              if (!state.ctx.error) {
+                doResponseEnd();
+              }
             },
             onError: (error) => {
+              if (state.ctx.error == null) {
+                state.ctx.error = error;
+              }
               if (!controller.signal.aborted) {
                 console.warn(`response.body stream error \`${error.message}\``);
                 state.connector();
@@ -484,28 +489,26 @@ export default ({
     if (state.currentStep >= HTTP_STEP_REQUEST_END
       && state.currentStep !== HTTP_STEP_RESPONSE_END) {
       handleHttpError(createError(400), state.ctx);
-    } else {
-      if (state.currentStep === HTTP_STEP_EMPTY || state.currentStep === HTTP_STEP_RESPONSE_END) {
-        assert(state.execute == null);
-        if (state.currentStep === HTTP_STEP_EMPTY) {
-          assert(state.ctx === null);
-        }
-        state.currentStep = HTTP_STEP_REQUEST_START;
-        state.count += 1;
-        state.ctx = generateRequestContext();
-        state.ctx.socket = socket;
-        state.ctx.signal = controller.signal;
-        if (onHttpRequest) {
-          onHttpRequest({
-            dateTimeCreate: state.dateTimeCreate,
-            bytesIncoming: state.bytesIncoming,
-            bytesOutgoing: state.bytesOutgoing,
-            count: state.count,
-            remoteAddress: socket.remoteAddress,
-          });
-        }
-        bindExcute();
+    } else if (state.currentStep === HTTP_STEP_EMPTY || state.currentStep === HTTP_STEP_RESPONSE_END) {
+      assert(state.execute == null);
+      if (state.currentStep === HTTP_STEP_EMPTY) {
+        assert(state.ctx === null);
       }
+      state.currentStep = HTTP_STEP_REQUEST_START;
+      state.count += 1;
+      state.ctx = generateRequestContext();
+      state.ctx.socket = socket;
+      state.ctx.signal = controller.signal;
+      if (onHttpRequest) {
+        onHttpRequest({
+          dateTimeCreate: state.dateTimeCreate,
+          bytesIncoming: state.bytesIncoming,
+          bytesOutgoing: state.bytesOutgoing,
+          count: state.count,
+          remoteAddress: socket.remoteAddress,
+        });
+      }
+      bindExcute();
     }
   }
 
