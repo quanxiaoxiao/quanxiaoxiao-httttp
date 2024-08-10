@@ -41,7 +41,7 @@ import attachResponseError from './attachResponseError.mjs';
 import generateResponse from './generateResponse.mjs';
 import generateRequestContext from './generateRequestContext.mjs';
 
-const calcTimeByRequest = (ctx) => performance.now() - ctx.request.timeOnStart;
+const calcTime = (ctx) => performance.now() - ctx.request.timeOnStart;
 
 const promisess = async (fn, ...args) => {
   const ret = await fn(...args);
@@ -289,20 +289,20 @@ export default ({
     onWebSocket({
       ctx,
       onHttpResponseStartLine: (ret) => {
-        ctx.response.timeOnStartLine = performance.now();
+        ctx.response.timeOnStartLine = calcTime(ctx);
         ctx.response.statusCode = ret.statusCode;
         ctx.response.statusText = ret.statusText;
         ctx.response.httpVersion = ret.httpVersion;
       },
       onHttpResponseHeader: (ret) => {
-        ctx.response.timeOnHeader = performance.now();
+        ctx.response.timeOnHeader = calcTime(ctx);
         ctx.response.headersRaw = ret.headersRaw;
         ctx.response.headers = ret.headers;
       },
       onHttpResponseBody: (chunk) => {
         ctx.response.bytesBody += chunk.length;
         if (ctx.response.timeOnBody == null) {
-          ctx.response.timeOnBody = performance.now();
+          ctx.response.timeOnBody = calcTime(ctx);
         }
       },
       onError: (error) => {
@@ -312,7 +312,7 @@ export default ({
         doSocketClose();
       },
       onConnect: () => {
-        ctx.response.timeOnConnect = performance.now();
+        ctx.response.timeOnConnect = calcTime(ctx);
         process.nextTick(() => {
           if (!controller.signal.aborted) {
             state.connector.detach();
@@ -323,7 +323,7 @@ export default ({
         state.bytesOutgoing += chunk.length;
       },
       onChunkIncoming: (chunk) => {
-        state.timeOnLastIncoming = performance.now();
+        state.timeOnLastIncoming = calcTime(ctx);
         state.bytesIncoming += chunk.length;
         ctx.request.bytesBody += chunk.length;
         if (ctx.request.timeOnBody == null) {
@@ -381,7 +381,7 @@ export default ({
     state.execute = decodeHttpRequest({
       onStartLine: async (ret) => {
         state.currentStep = HTTP_STEP_REQUEST_START_LINE;
-        ctx.request.timeOnStartLine = calcTimeByRequest(ctx);
+        ctx.request.timeOnStartLine = calcTime(ctx);
         ctx.request.httpVersion = ret.httpVersion;
         ctx.request.method = ret.method;
         ctx.request.url = ret.path;
@@ -410,29 +410,27 @@ export default ({
         state.currentStep = HTTP_STEP_REQUEST_HEADER;
         ctx.request.headersRaw = ret.headersRaw;
         ctx.request.headers = ret.headers;
-        ctx.request.timeOnHeader = calcTimeByRequest(ctx);
+        ctx.request.timeOnHeader = calcTime(ctx);
         if (onHttpRequestHeader) {
           await onHttpRequestHeader(ctx);
           assert(!controller.signal.aborted);
         }
         if (isWebSocketRequest(ctx.request)) {
           doWebSocket(ctx);
-        } else {
-          if (hasHttpBodyContent(ctx.request.headers)) {
-            attachRequestBodyBackpress(ctx);
-          } else if (ctx.request.body != null) {
-            if (ctx.request.body instanceof Writable && !ctx.request.body.destroyed) {
-              ctx.request.body.destroy();
-            }
-            ctx.request.body = null;
+        } else if (hasHttpBodyContent(ctx.request.headers)) {
+          attachRequestBodyBackpress(ctx);
+        } else if (ctx.request.body != null) {
+          if (ctx.request.body instanceof Writable && !ctx.request.body.destroyed) {
+            ctx.request.body.destroy();
           }
+          ctx.request.body = null;
         }
       },
       onBody: (chunk) => {
         assert(!controller.signal.aborted);
         assert(!ctx.request.connection);
         if (ctx.request.timeOnBody == null) {
-          ctx.request.timeOnBody = calcTimeByRequest(ctx);
+          ctx.request.timeOnBody = calcTime(ctx);
           if (state.currentStep < HTTP_STEP_REQUEST_BODY) {
             state.currentStep = HTTP_STEP_REQUEST_BODY;
           }
@@ -448,7 +446,7 @@ export default ({
           if (state.currentStep < HTTP_STEP_REQUEST_END) {
             state.currentStep = HTTP_STEP_REQUEST_END;
           }
-          ctx.request.timeOnEnd = calcTimeByRequest(ctx);
+          ctx.request.timeOnEnd = calcTime(ctx);
           if (ctx.request.timeOnBody == null) {
             ctx.request.timeOnBody = ctx.request.timeOnEnd;
           }
@@ -481,7 +479,7 @@ export default ({
 
   function checkRequestChunkValid (chunk) {
     assert(!controller.signal.aborted);
-    state.timeOnLastIncoming = performance.now();
+    state.timeOnLastIncoming = calcTime(state.ctx);
     state.bytesIncoming += chunk.length;
     if (state.currentStep >= HTTP_STEP_REQUEST_END
       && state.currentStep !== HTTP_STEP_RESPONSE_END) {
