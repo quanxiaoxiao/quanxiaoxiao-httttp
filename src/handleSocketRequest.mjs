@@ -68,6 +68,7 @@ export default ({
     dateTimeCreate: Date.now(),
     timeOnStart: performance.now(),
     timeOnLastIncoming: null,
+    timeOnLastOutgoing: null,
     bytesIncoming: 0,
     bytesOutgoing: 0,
     count: 0,
@@ -76,11 +77,20 @@ export default ({
     connector: null,
   };
 
+  function updateTimeOnLastIncoming() {
+    state.timeOnLastIncoming = performance.now() - state.timeOnStart;
+  }
+
+  function updateTimeOnLastOutgoing() {
+    state.timeOnLastOutgoing = performance.now() - state.timeOnStart;
+  }
+
   function doOutgoning(chunk) {
     const size = chunk.length;
     if (!controller.signal.aborted && size > 0) {
       try {
         const ret = state.connector.write(chunk);
+        updateTimeOnLastOutgoing();
         state.bytesOutgoing += size;
         return ret;
       } catch (error) {
@@ -131,6 +141,7 @@ export default ({
           const chunk = encodeHttp(ctx.error.response);
           const size = chunk.length;
           state.connector.end(chunk);
+          updateTimeOnLastOutgoing();
           state.bytesOutgoing += size;
         } catch (error) {
           console.warn(error);
@@ -329,13 +340,14 @@ export default ({
       },
       onChunkOutgoing: (chunk) => {
         state.bytesOutgoing += chunk.length;
+        updateTimeOnLastOutgoing();
       },
       onChunkIncoming: (chunk) => {
-        state.timeOnLastIncoming = calcTime(ctx);
+        updateTimeOnLastIncoming();
         state.bytesIncoming += chunk.length;
         ctx.request.bytesBody += chunk.length;
         if (ctx.request.timeOnBody == null) {
-          ctx.response.timeOnBody = state.timeOnLastIncoming;
+          ctx.response.timeOnBody = calcTime(state.ctx);
         }
       },
     });
@@ -370,17 +382,33 @@ export default ({
   const doSocketClose = (error) => {
     if (onSocketClose && !state.isSocketCloseEmit) {
       state.isSocketCloseEmit = true;
-      onSocketClose({
+      const result = {
         dateTimeCreate: state.dateTimeCreate,
-        dateTimeLastIncoming: state.timeOnLastIncoming == null ? null : state.dateTimeCreate + (state.timeOnLastIncoming - state.timeOnStart),
+        dateTimeLastIncoming: null,
+        dateTimeLastOutgoing: null,
         bytesIncoming: state.bytesIncoming,
         bytesOutgoing: state.bytesOutgoing,
         count: state.count,
         step: state.currentStep,
         error,
-        request: state.ctx ? state.ctx.request : null,
-        response: state.ctx ? state.ctx.response : null,
-      });
+        request: null,
+        response: null,
+      };
+      if (state.ctx) {
+        if (state.ctx.request) {
+          result.request = state.ctx.request;
+        }
+        if (state.ctx.response) {
+          result.response = state.ctx.response;
+        }
+      }
+      if (state.timeOnLastIncoming != null) {
+        result.dateTimeLastIncoming = result.dateTimeCreate + (state.timeOnLastIncoming - state.timeOnStart);
+      }
+      if (state.timeOnLastOutgoing != null) {
+        result.dateTimeLastOutgoing = result.dateTimeCreate + (state.timeOnLastOutgoing - state.timeOnStart);
+      }
+      onSocketClose(result);
     }
   };
 
@@ -487,7 +515,6 @@ export default ({
 
   function checkRequestChunkValid (chunk) {
     assert(!controller.signal.aborted);
-    state.timeOnLastIncoming = performance.now() - state.timeOnStart;
     state.bytesIncoming += chunk.length;
     if (state.currentStep >= HTTP_STEP_REQUEST_END
       && state.currentStep !== HTTP_STEP_RESPONSE_END) {
@@ -519,6 +546,7 @@ export default ({
     {
       onData: (chunk) => {
         if (chunk.length > 0) {
+          updateTimeOnLastIncoming();
           checkRequestChunkValid(chunk);
           if (!controller.signal.aborted) {
             state.execute(chunk)
