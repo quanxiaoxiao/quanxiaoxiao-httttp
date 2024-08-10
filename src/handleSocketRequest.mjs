@@ -223,6 +223,114 @@ export default ({
     doSocketClose(error);
   }
 
+  function attachRequestBodyBackpress(ctx) {
+    if (ctx.request.body == null) {
+      ctx.request.body = new PassThrough();
+    }
+    assert(ctx.request.body instanceof Writable);
+    ctx.request._write = wrapStreamWrite({
+      stream: ctx.request.body,
+      signal: controller.signal,
+      onPause: () => {
+        state.connector.pause();
+      },
+      onDrain: () => {
+        state.connector.resume();
+      },
+      onError: (error) => {
+        if (!controller.signal.aborted) {
+          if (!ctx.error) {
+            ctx.error = new Error(`request body stream, \`${error.message}\``);
+          }
+          doResponseError(ctx);
+        }
+      },
+    });
+    ctx.request.end = (fn) => {
+      if (fn == null) {
+        ctx.request._write();
+      } else {
+        const type = typeof fn;
+        if (type === 'string' || Buffer.isBuffer(fn)) {
+          ctx.request._write(type == 'string' ? Buffer.from(fn, 'utf8') : fn);
+          ctx.request._write();
+        } else if (type === 'function') {
+          ctx.request._write(fn);
+        } else {
+          ctx.request._write();
+        }
+      }
+    };
+  }
+
+  function doWebSocket(ctx) {
+    if (!onWebSocket) {
+      throw createError(501);
+    }
+    ctx.request.connection = true;
+    state.currentStep = HTTP_STEP_REQUEST_WEBSOCKET_CONNECTION;
+    state.execute = null;
+    state.connector.pause();
+    ctx.request.bytesBody = 0;
+    ctx.response = {
+      headers: {},
+      headersRaw: [],
+      statusCode: null,
+      httpVersion: null,
+      statusText: null,
+      timeOnConnect: null,
+      timeOnStartLine: null,
+      timeOnBody: null,
+      timeOnHeader: null,
+      bytesBody: 0,
+    };
+    onWebSocket({
+      ctx,
+      onHttpResponseStartLine: (ret) => {
+        ctx.response.timeOnStartLine = performance.now();
+        ctx.response.statusCode = ret.statusCode;
+        ctx.response.statusText = ret.statusText;
+        ctx.response.httpVersion = ret.httpVersion;
+      },
+      onHttpResponseHeader: (ret) => {
+        ctx.response.timeOnHeader = performance.now();
+        ctx.response.headersRaw = ret.headersRaw;
+        ctx.response.headers = ret.headers;
+      },
+      onHttpResponseBody: (chunk) => {
+        ctx.response.bytesBody += chunk.length;
+        if (ctx.response.timeOnBody == null) {
+          ctx.response.timeOnBody = performance.now();
+        }
+      },
+      onError: (error) => {
+        doSocketClose(error);
+      },
+      onClose: () => {
+        doSocketClose();
+      },
+      onConnect: () => {
+        ctx.response.timeOnConnect = performance.now();
+        process.nextTick(() => {
+          if (!controller.signal.aborted) {
+            state.connector.detach();
+          }
+        });
+      },
+      onChunkOutgoing: (chunk) => {
+        state.bytesOutgoing += chunk.length;
+      },
+      onChunkIncoming: (chunk) => {
+        state.timeOnLastIncoming = performance.now();
+        state.bytesIncoming += chunk.length;
+        ctx.request.bytesBody += chunk.length;
+        if (ctx.request.timeOnBody == null) {
+          ctx.response.timeOnBody = state.timeOnLastIncoming;
+        }
+      },
+    });
+  }
+
   const doHttpRequestComplete = (ctx) => {
     assert(!controller.signal.aborted);
     assert(ctx.error == null);
@@ -306,112 +414,10 @@ export default ({
           assert(!controller.signal.aborted);
         }
         if (isWebSocketRequest(ctx.request)) {
-          if (!onWebSocket) {
-            throw createError(501);
-          }
-          ctx.request.connection = true;
-          state.currentStep = HTTP_STEP_REQUEST_WEBSOCKET_CONNECTION;
-          state.execute = null;
-          if (!ctx.socket.isPaused()) {
-            ctx.socket.pause();
-          }
-          ctx.request.bytesBody = 0;
-          ctx.response = {
-            headers: {},
-            headersRaw: [],
-            statusCode: null,
-            httpVersion: null,
-            statusText: null,
-            timeOnConnect: null,
-            timeOnStartLine: null,
-            timeOnBody: null,
-            timeOnHeader: null,
-            bytesBody: 0,
-          };
-          await onWebSocket({
-            ctx,
-            onHttpResponseStartLine: (ret) => {
-              ctx.response.timeOnStartLine = performance.now();
-              ctx.response.statusCode = ret.statusCode;
-              ctx.response.statusText = ret.statusText;
-              ctx.response.httpVersion = ret.httpVersion;
-            },
-            onHttpResponseHeader: (ret) => {
-              ctx.response.timeOnHeader = performance.now();
-              ctx.response.headersRaw = ret.headersRaw;
-              ctx.response.headers = ret.headers;
-            },
-            onHttpResponseBody: (chunk) => {
-              ctx.response.bytesBody += chunk.length;
-              if (ctx.response.timeOnBody == null) {
-                ctx.response.timeOnBody = performance.now();
-              }
-            },
-            onError: (error) => {
-              doSocketClose(error);
-            },
-            onClose: () => {
-              doSocketClose();
-            },
-            onConnect: () => {
-              ctx.response.timeOnConnect = performance.now();
-              process.nextTick(() => {
-                if (!controller.signal.aborted) {
-                  state.connector.detach();
-                }
-              });
-            },
-            onChunkOutgoing: (chunk) => {
-              state.bytesOutgoing += chunk.length;
-            },
-            onChunkIncoming: (chunk) => {
-              state.timeOnLastIncoming = performance.now();
-              state.bytesIncoming += chunk.length;
-              ctx.request.bytesBody += chunk.length;
-              if (ctx.request.timeOnBody == null) {
-                ctx.response.timeOnBody = state.timeOnLastIncoming;
-              }
-            },
-          });
+          doWebSocket(ctx);
         } else {
           if (hasHttpBodyContent(ctx.request.headers)) {
-            if (ctx.request.body == null) {
-              ctx.request.body = new PassThrough();
-            }
-            assert(ctx.request.body instanceof Writable);
-            ctx.request._write = wrapStreamWrite({
-              stream: ctx.request.body,
-              signal: controller.signal,
-              onPause: () => {
-                state.connector.pause();
-              },
-              onDrain: () => {
-                state.connector.resume();
-              },
-              onError: (error) => {
-                if (!controller.signal.aborted) {
-                  if (!ctx.error) {
-                    ctx.error = new Error(`request body stream, \`${error.message}\``);
-                  }
-                  doResponseError(ctx);
-                }
-              },
-            });
-            ctx.request.end = (fn) => {
-              if (fn == null) {
-                ctx.request._write();
-              } else {
-                const type = typeof fn;
-                if (type === 'string' || Buffer.isBuffer(fn)) {
-                  ctx.request._write(type == 'string' ? Buffer.from(fn, 'utf8') : fn);
-                  ctx.request._write();
-                } else if (type === 'function') {
-                  ctx.request._write(fn);
-                } else {
-                  ctx.request._write();
-                }
-              }
-            };
+            attachRequestBodyBackpress(ctx);
           } else if (ctx.request.body != null) {
             if (ctx.request.body instanceof Writable && !ctx.request.body.destroyed) {
               ctx.request.body.destroy();
@@ -433,6 +439,10 @@ export default ({
       },
       onEnd: async (ret) => {
         if (!ctx.request.connection) {
+          if (ctx.request._write) {
+            assert(ctx.request.body instanceof Writable);
+            assert(!ctx.request.body.writableEnded);
+          }
           if (state.currentStep < HTTP_STEP_REQUEST_END) {
             state.currentStep = HTTP_STEP_REQUEST_END;
           }
@@ -445,10 +455,10 @@ export default ({
             assert(!controller.signal.aborted);
           }
           if (ret.dataBuf.length > 0) {
-            state.ctx.error = createError(400);
-            doResponseError(state.ctx);
+            ctx.error = createError(400);
+            doResponseError(ctx);
           }
-          if (!controller.signal.aborted) {
+          if (!controller.signal.aborted && !ctx.error) {
             if (ctx.request.end
               && ctx.request.body instanceof Writable
               && !ctx.request.body.writableEnded) {
@@ -468,6 +478,21 @@ export default ({
             } else {
               doHttpRequestComplete(ctx);
             }
+            /*
+            if (!ctx.response
+              && ctx.request.end
+              && state.currentStep === HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME
+              && ctx.request.body instanceof Writable
+              && !ctx.request.body.writableEnded
+            ) {
+              state.currentStep = HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME;
+              ctx.request.end(() => {
+                doHttpRequestComplete(ctx);
+              });
+            } else {
+              doHttpRequestComplete(ctx);
+            }
+            */
           }
         }
       },
