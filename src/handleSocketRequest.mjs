@@ -479,7 +479,7 @@ export default ({
 
   function checkRequestChunkValid (chunk) {
     assert(!controller.signal.aborted);
-    state.timeOnLastIncoming = calcTime(state.ctx);
+    state.timeOnLastIncoming = performance.now() - state.timeOnStart;
     state.bytesIncoming += chunk.length;
     if (state.currentStep >= HTTP_STEP_REQUEST_END
       && state.currentStep !== HTTP_STEP_RESPONSE_END) {
