@@ -76,7 +76,7 @@ export default ({
     connector: null,
   };
 
-  const doOutgoning = (chunk, ctx) => {
+  function doOutgoning(chunk) {
     const size = chunk.length;
     if (!controller.signal.aborted && size > 0) {
       try {
@@ -85,14 +85,16 @@ export default ({
         return ret;
       } catch (error) {
         if (!controller.signal.aborted) {
-          ctx.error = error;
           controller.abort();
+        }
+        if (state.ctx.error == null) {
+          state.ctx.error = error;
         }
         return false;
       }
     }
     return false;
-  };
+  }
 
   const doResponseEnd = () => {
     assert(state.ctx != null);
@@ -166,7 +168,7 @@ export default ({
         body: ctx.response.body,
         onHeader: (chunk) => {
           state.currentStep = HTTP_STEP_RESPONSE_HEADER_SPEND;
-          doOutgoning(chunk, ctx);
+          doOutgoning(chunk);
         },
       });
       process.nextTick(() => {
@@ -178,11 +180,11 @@ export default ({
           wrapStreamRead({
             signal: controller.signal,
             stream: ctx.response.body,
-            onData: (chunk) => doOutgoning(encodeHttpResponse(chunk), ctx),
+            onData: (chunk) => doOutgoning(encodeHttpResponse(chunk)),
             onEnd: () => {
               const chunk = encodeHttpResponse();
               state.currentStep = HTTP_STEP_RESPONSE_READ_CONTENT_END;
-              doOutgoning(chunk, ctx);
+              doOutgoning(chunk);
               doResponseEnd();
             },
             onError: (error) => {
@@ -207,7 +209,7 @@ export default ({
       try {
         const chunk = encodeHttp(generateResponse(ctx));
         state.currentStep = HTTP_STEP_RESPONSE_HEADER_SPEND;
-        doOutgoning(chunk, ctx);
+        doOutgoning(chunk);
         doResponseEnd();
       } catch (error) {
         handleHttpError(error, ctx);
