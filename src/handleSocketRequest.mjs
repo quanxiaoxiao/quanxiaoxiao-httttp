@@ -85,7 +85,7 @@ export default ({
     state.timeOnLastOutgoing = performance.now() - state.timeOnStart;
   }
 
-  function doOutgoning(chunk) {
+  function doChunkOutgoning(chunk) {
     const size = chunk.length;
     if (!controller.signal.aborted && size > 0) {
       try {
@@ -184,7 +184,7 @@ export default ({
         body: ctx.response.body,
         onHeader: (chunk) => {
           state.currentStep = HTTP_STEP_RESPONSE_HEADER_SPEND;
-          doOutgoning(chunk);
+          doChunkOutgoning(chunk);
         },
       });
       process.nextTick(() => {
@@ -196,11 +196,11 @@ export default ({
           wrapStreamRead({
             signal: controller.signal,
             stream: ctx.response.body,
-            onData: (chunk) => doOutgoning(encodeHttpResponse(chunk)),
+            onData: (chunk) => doChunkOutgoning(encodeHttpResponse(chunk)),
             onEnd: () => {
               const chunk = encodeHttpResponse();
               state.currentStep = HTTP_STEP_RESPONSE_READ_CONTENT_END;
-              doOutgoning(chunk);
+              doChunkOutgoning(chunk);
               if (!state.ctx.error) {
                 doResponseEnd();
               }
@@ -230,7 +230,7 @@ export default ({
       try {
         const chunk = encodeHttp(generateResponse(ctx));
         state.currentStep = HTTP_STEP_RESPONSE_HEADER_SPEND;
-        doOutgoning(chunk);
+        doChunkOutgoning(chunk);
         doResponseEnd();
       } catch (error) {
         handleHttpError(error, ctx);
