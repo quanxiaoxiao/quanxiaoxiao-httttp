@@ -518,7 +518,7 @@ export default ({
     });
   };
 
-  function checkRequestChunkValid (chunk) {
+  function checkRequestChunk(chunk) {
     assert(!controller.signal.aborted);
     state.bytesIncoming += chunk.length;
     if (state.currentStep >= HTTP_STEP_REQUEST_END
@@ -541,7 +541,11 @@ export default ({
           bytesOutgoing: state.bytesOutgoing,
           count: state.count,
           remoteAddress: socket.remoteAddress,
+          ctx: state.ctx,
         });
+        if (state.ctx.ws) {
+          assert(state.ctx.ws instanceof Writable && state.ctx.ws.writable);
+        }
       }
       bindExcute();
     }
@@ -552,7 +556,7 @@ export default ({
       onData: (chunk) => {
         if (chunk.length > 0) {
           updateTimeOnLastIncoming();
-          checkRequestChunkValid(chunk);
+          checkRequestChunk(chunk);
           if (!controller.signal.aborted) {
             state.execute(chunk)
               .then(
@@ -599,11 +603,7 @@ export default ({
         }
       },
       onFinish: () => {
-        if (state.ctx && state.ctx.error) {
-          doSocketClose(state.ctx.error);
-        } else {
-          doSocketClose();
-        }
+        doSocketClose(state.ctx?.error);
       },
       onError: (error) => {
         if (!controller.signal.aborted) {
