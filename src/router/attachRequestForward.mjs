@@ -1,6 +1,10 @@
 import assert from 'node:assert';
 import { Buffer } from 'node:buffer';
-import { Readable, PassThrough } from 'node:stream';
+import {
+  Readable,
+  PassThrough,
+  Writable,
+} from 'node:stream';
 import createError from 'http-errors';
 import { waitConnect } from '@quanxiaoxiao/socket';
 import request, { getSocketConnect } from '@quanxiaoxiao/http-request';
@@ -39,7 +43,8 @@ export default async (ctx) => {
     await waitConnect(ctx.requestForward.socket, 1000 * 10, ctx.signal);
     ctx.requestForward.timeOnConnect = performance.now() - ctx.request.timeOnStart;
     if (ctx.forward.onConnect) {
-      ctx.forward.onConnect();
+      await ctx.forward.onConnect();
+      assert(!ctx.signal.aborted);
     }
   } catch (error) {
     if (ctx.signal.aborted) {
@@ -56,6 +61,11 @@ export default async (ctx) => {
   } else if (Buffer.isBuffer(ctx.request.body)) {
     ctx.requestForward.request.body = ctx.request.body;
   }
+  if (Object.hasOwnProperty.call(ctx.forward, 'onBody')) {
+    assert(ctx.forward.onBody instanceof Writable);
+    ctx.requestForward.response.body = ctx.forward.onBody;
+  }
+
   request(
     {
       signal: ctx.signal,
@@ -73,16 +83,24 @@ export default async (ctx) => {
           ctx.forward.onChunkIncoming(chunk);
         }
       },
-      onStartLine: (ret) => {
+      onStartLine: async (ret) => {
         ctx.requestForward.response.httpVersion = ret.httpVersion;
         ctx.requestForward.response.statusCode = ret.statusCode;
         ctx.requestForward.response.statusText = ret.statusText;
         ctx.requestForward.timeOnResponseStartLine = ret.timeOnResponseStartLine;
+        if (ctx.forward.onHttpResponseStartLine) {
+          await ctx.forward.onHttpResponseStartLine(ctx);
+          assert(!ctx.signal.aborted);
+        }
       },
-      onHeader: (ret) => {
+      onHeader: async (ret) => {
         ctx.requestForward.response.headersRaw = ret.headersRaw;
         ctx.requestForward.response.headers = ret.headers;
         ctx.requestForward.timeOnResponseHeader = ret.timeOnResponseHeader;
+        if (ctx.forward.onHttpResponseHeader) {
+          await ctx.forward.onHttpResponseHeader(ctx);
+          assert(!ctx.signal.aborted);
+        }
         if (ctx.requestForward._promise) {
           ctx.requestForward._promise();
         }
