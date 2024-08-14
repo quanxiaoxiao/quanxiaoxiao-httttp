@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import net from 'node:net';
 import request, { getSocketConnect } from '@quanxiaoxiao/http-request';
 import { waitFor } from '@quanxiaoxiao/utils';
+import readStream from '../readStream.mjs';
 import handleSocketRequest from '../handleSocketRequest.mjs';
 import generateRouteMatchList from './generateRouteMatchList.mjs';
 import createHttpRequestHandler from './createHttpRequestHandler.mjs';
@@ -614,6 +615,76 @@ test('createHttpRequestHandler forward headers', async () => {
   );
   assert.equal(ret.body.toString(), 'ok2');
   assert.equal(ret.statusCode, 202);
+  server1.close();
+  server2.close();
+});
+
+test('createHttpRequestHandler forward headers onPre', async () => {
+  const port1 = getPort();
+  const port2 = getPort();
+  const routeMatchList1 = generateRouteMatchList({
+    '/forward/33/44': {
+      onPre: (ctx) => {
+        ctx.forward = {
+          port: port2,
+        };
+      },
+      post: async (ctx) => {
+        assert.equal(ctx.response, null);
+        const buf = await readStream(ctx.requestForward.response.body, ctx.signal);
+        assert.equal(buf.toString(), 'aaabbb');
+        assert.equal(ctx.response, null);
+        assert.equal(ctx.requestForward.response.statusCode, 201);
+        ctx.response = {
+          statusCode: ctx.requestForward.response.statusCode,
+          body: buf,
+        };
+      },
+    },
+  });
+  const routeMatchList2 = generateRouteMatchList({
+    '/forward/33/44': {
+      post: (ctx) => {
+        ctx.response = {
+          statusCode: 201,
+          headers: {
+            server: 'Quan',
+          },
+          body: 'aaabbb',
+        };
+      },
+    },
+  });
+  const server1 = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      ...createHttpRequestHandler({
+        list: routeMatchList1,
+      }),
+    });
+  });
+  server1.listen(port1);
+  const server2 = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      ...createHttpRequestHandler({
+        list: routeMatchList2,
+      }),
+    });
+  });
+  server2.listen(port2);
+  await waitFor(100);
+  const ret = await request(
+    {
+      path: '/forward/33/44',
+      method: 'POST',
+      body: 'sss',
+    },
+    () => getSocketConnect({ port: port1 }),
+  );
+  assert.equal(ret.statusCode, 201);
+  assert(!ret.headers.server);
+  assert.equal(ret.body.toString(), 'aaabbb');
   server1.close();
   server2.close();
 });
