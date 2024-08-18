@@ -1,10 +1,52 @@
+import Ajv from 'ajv';
 import {
   filterHeaders,
   convertObjectToArray,
   getHeaderValue,
 } from '@quanxiaoxiao/http-utils';
+import httpRequestValidate from './schemas/httpRequest.mjs';
+
+const ajv = new Ajv();
+
+const validate = ajv.compile({
+  type: 'object',
+  properties: {
+    port: {
+      type: 'integer',
+      minimum: 1,
+      maximum: 65535,
+    },
+    method: {
+      type: 'string',
+      nullable: false,
+    },
+    path: {
+      type: 'string',
+      nullable: false,
+    },
+    headers: {
+      type: 'object',
+      nullable: false,
+    },
+    remoteAddress: {
+      type: 'string',
+      nullable: true,
+    },
+    hostname: {
+      type: 'string',
+      nullable: false,
+    },
+  },
+  required: ['port'],
+});
 
 export default (options, request) => {
+  if (!validate(options)) {
+    throw new Error(JSON.stringify(options.error));
+  }
+  if (!httpRequestValidate(request)) {
+    throw new Error(JSON.stringify(httpRequestValidate.error));
+  }
   const requestForwardOptions = {
     method: options.method,
     path: options.path,
@@ -29,8 +71,7 @@ export default (options, request) => {
       requestForwardOptions.headers.push(`${options.hostname || '127.0.0.1'}:${options.port}`);
     }
   }
-
-  if (options.remoteAddress && !getHeaderValue(requestForwardOptions.headers, 'x-remote-address')) {
+  if (options.remoteAddress) {
     requestForwardOptions.headers = filterHeaders(requestForwardOptions.headers, ['x-remote-address']);
     requestForwardOptions.headers.push('X-Remote-Address');
     requestForwardOptions.headers.push(options.remoteAddress);
