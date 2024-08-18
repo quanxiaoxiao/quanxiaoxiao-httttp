@@ -5,7 +5,7 @@ import {
   pipeForward,
   waitConnect,
 } from '@quanxiaoxiao/socket';
-import generateRequestForwardOptions from './generateRequestForwardOptions.mjs';
+import generateRequestForwardOptions from './utils/generateRequestForwardOptions.mjs';
 
 export default async ({
   options,

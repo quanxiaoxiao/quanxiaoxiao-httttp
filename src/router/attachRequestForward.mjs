@@ -8,7 +8,7 @@ import {
 import createError from 'http-errors';
 import { waitConnect } from '@quanxiaoxiao/socket';
 import request, { getSocketConnect } from '@quanxiaoxiao/http-request';
-import generateRequestForwardOptions from '../generateRequestForwardOptions.mjs';
+import generateRequestForwardOptions from '../utils/generateRequestForwardOptions.mjs';
 
 export default async (ctx) => {
   assert(!ctx.requestForward);
