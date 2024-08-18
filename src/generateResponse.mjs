@@ -11,8 +11,11 @@ import {
 } from '@quanxiaoxiao/http-utils';
 
 export default (ctx) => {
+  assert(!ctx.error);
   if (!ctx.response) {
-    throw createError(503, '`ctx.response` unset');
+    ctx.error = new Error('`ctx.response` unset');
+    ctx.error.statusCode = 503;
+    throw createError(503);
   }
   const response = {
     statusCode: ctx.response.statusCode ?? 200,
@@ -51,8 +54,9 @@ export default (ctx) => {
         ['content-encoding'],
       );
       if (ctx.request
-          && ctx.request.headers
-          && Object.hasOwnProperty.call(ctx.request.headers, 'accept-encoding')) {
+        && ctx.request.headers
+        && Object.hasOwnProperty.call(ctx.request.headers, 'accept-encoding')
+      ) {
         const chunk = Buffer.from(JSON.stringify(ctx.response.data));
         const ret = encodeContentEncoding(chunk, ctx.request.headers['accept-encoding']);
         if (ret.name) {
@@ -61,6 +65,13 @@ export default (ctx) => {
             {
               'Content-Type': 'application/json; charset=utf-8',
               'Content-Encoding': ret.name,
+            },
+          );
+        } else {
+          response.headers = setHeaders(
+            response.headers,
+            {
+              'Content-Type': 'application/json; charset=utf-8',
             },
           );
         }

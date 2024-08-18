@@ -3,9 +3,22 @@ import { PassThrough } from 'node:stream';
 import assert from 'node:assert';
 import zlib from 'node:zlib';
 import { STATUS_CODES } from 'node:http';
+import createError from 'http-errors';
 import generateResponse from './generateResponse.mjs';
 
 test('generateResponse', () => {
+  {
+    const ctx = {};
+    try {
+      generateResponse(ctx);
+      throw new Error('xxx');
+    } catch (error) {
+      assert.equal(error.statusCode, 503);
+      assert.equal(ctx.error.message, '`ctx.response` unset');
+      assert.equal(ctx.error.statusCode, 503);
+      assert.equal(error.message, createError(503).message);
+    }
+  }
   assert.throws(() => {
     const ctx = {};
     generateResponse(ctx);
@@ -103,7 +116,7 @@ test('generateResponse', () => {
   assert(response.headers.includes('text/html'));
 });
 
-test('generateResponse gzip', () => {
+test('generateResponse content-encoding gzip', () => {
   const ctx = {
     request: {
       headers: {
@@ -123,6 +136,29 @@ test('generateResponse gzip', () => {
   assert.deepEqual(
     ctx.response.data,
     JSON.parse(zlib.unzipSync(response.body).toString()),
+  );
+});
+
+test('generateResponse content-encoding unkown', () => {
+  const ctx = {
+    request: {
+      headers: {
+        'accept-encoding': 'gzips',
+      },
+    },
+    response: {
+      data: {
+        name: 'quan',
+      },
+    },
+  };
+  const response = generateResponse(ctx);
+  assert.equal(response.statusCode, 200);
+  assert(response.headers.includes('application/json; charset=utf-8'));
+  assert.deepEqual(response.headers, ['Content-Type', 'application/json; charset=utf-8']);
+  assert.deepEqual(
+    ctx.response.data,
+    JSON.parse(response.body),
   );
 });
 
