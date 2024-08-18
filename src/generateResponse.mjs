@@ -6,6 +6,7 @@ import createError from 'http-errors';
 import {
   convertObjectToArray,
   filterHeaders,
+  getHeaderValue,
   encodeContentEncoding,
   setHeaders,
 } from '@quanxiaoxiao/http-utils';
@@ -33,9 +34,11 @@ export default (ctx) => {
       assert(Object.hasOwnProperty.call(ctx.response, 'data'));
     }
   }
+
   if (STATUS_CODES[response.statusCode]) {
     response.statusText = STATUS_CODES[response.statusCode];
   }
+
   if (ctx.response._headers) {
     response.headers = ctx.response._headers;
   } else if (ctx.response.headersRaw) {
@@ -45,51 +48,49 @@ export default (ctx) => {
   if (!Array.isArray(response.headers)) {
     response.headers = convertObjectToArray(response.headers);
   }
+
   if (Object.hasOwnProperty.call(ctx.response, 'data')) {
     if (ctx.response.data == null) {
       response.body = null;
     } else {
+      response.body = Buffer.from(JSON.stringify(ctx.response.data));
       response.headers = filterHeaders(
         response.headers,
-        ['content-encoding'],
+        ['content-encoding', 'content-type'],
       );
-      if (ctx.request
-        && ctx.request.headers
-        && Object.hasOwnProperty.call(ctx.request.headers, 'accept-encoding')
-      ) {
-        const chunk = Buffer.from(JSON.stringify(ctx.response.data));
-        const ret = encodeContentEncoding(chunk, ctx.request.headers['accept-encoding']);
-        if (ret.name) {
-          response.headers = setHeaders(
-            response.headers,
-            {
-              'Content-Type': 'application/json; charset=utf-8',
-              'Content-Encoding': ret.name,
-            },
-          );
-        } else {
-          response.headers = setHeaders(
-            response.headers,
-            {
-              'Content-Type': 'application/json; charset=utf-8',
-            },
-          );
-        }
-        response.body = ret.buf;
-      } else {
-        response.headers = setHeaders(
-          response.headers,
-          {
-            'Content-Type': 'application/json; charset=utf-8',
-          },
-        );
-        response.body = JSON.stringify(ctx.response.data);
-      }
+      response.headers = setHeaders(
+        response.headers,
+        {
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+      );
     }
   }
   assert(response.statusCode >= 0 && response.statusCode <= 999);
   if (response.body != null) {
-    assert(Buffer.isBuffer(response.body) || typeof response.body === 'string');
+    if (typeof response.body === 'string') {
+      response.body = Buffer.from(response.body);
+    }
+    assert(Buffer.isBuffer(response.body));
+    if (ctx.request
+      && ctx.request.headers
+      && ctx.request.headers['accept-encoding']
+      && !getHeaderValue(response.headers, 'content-encoding')
+    ) {
+      const ret = encodeContentEncoding(
+        response.body,
+        ctx.request.headers['accept-encoding'],
+      );
+      if (ret.name) {
+        response.headers = setHeaders(
+          response.headers,
+          {
+            'Content-Encoding': ret.name,
+          },
+        );
+      }
+      response.body = ret.buf;
+    }
   }
   return response;
 };
