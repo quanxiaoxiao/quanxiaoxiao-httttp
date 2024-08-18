@@ -147,6 +147,9 @@ test('generateResponse content-encoding unkown', () => {
       },
     },
     response: {
+      headers: {
+        'content-encoding': 'gzip',
+      },
       data: {
         name: 'quan',
       },
