@@ -40,13 +40,9 @@ import {
 import attachResponseError from './attachResponseError.mjs';
 import generateResponse from './generateResponse.mjs';
 import generateRequestContext from './generateRequestContext.mjs';
+import promisess from './utils/promisess.mjs';
 
 const calcTime = (ctx) => performance.now() - ctx.request.timeOnStart;
-
-const promisess = async (fn, ...args) => {
-  const ret = await fn(...args);
-  return ret;
-};
 
 export default ({
   socket,
