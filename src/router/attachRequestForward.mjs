@@ -116,6 +116,9 @@ export default async (ctx) => {
           if (ctx.error == null) {
             ctx.error = error;
           }
+          if (ctx.forward.onError) {
+            ctx.forward.onError(error, ctx);
+          }
         }
       },
     );
