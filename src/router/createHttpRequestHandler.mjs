@@ -178,4 +178,12 @@ export default ({
       console.error(ctx.error);
     }
   },
+  onSocketClose: (data, ctx) => {
+    if (ctx
+      && ctx.forward
+      && ctx.forward.onClose
+    ) {
+      ctx.forward.onClose(ctx);
+    }
+  },
 });

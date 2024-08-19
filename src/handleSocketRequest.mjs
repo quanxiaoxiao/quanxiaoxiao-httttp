@@ -413,7 +413,7 @@ export default ({
       if (state.timeOnLastOutgoing != null) {
         result.dateTimeLastOutgoing = result.dateTimeCreate + (state.timeOnLastOutgoing - state.timeOnStart);
       }
-      onSocketClose(result);
+      onSocketClose(result, state.ctx);
     }
   }
 
