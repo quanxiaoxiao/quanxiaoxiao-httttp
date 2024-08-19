@@ -42,8 +42,6 @@ import generateResponse from './generateResponse.mjs';
 import generateRequestContext from './generateRequestContext.mjs';
 import promisess from './utils/promisess.mjs';
 
-const calcTime = (ctx) => performance.now() - ctx.request.timeOnStart;
-
 export default ({
   socket,
   onWebSocket,
@@ -81,6 +79,11 @@ export default ({
     state.timeOnLastOutgoing = performance.now() - state.timeOnStart;
   }
 
+  function calcContextTime() {
+    assert(state.ctx && state.ctx.request);
+    return performance.now() - state.ctx.request.timeOnStart;
+  }
+
   function doChunkOutgoning(chunk) {
     const size = chunk.length;
     if (!controller.signal.aborted && size > 0) {
@@ -107,9 +110,10 @@ export default ({
     assert(state.currentStep < HTTP_STEP_RESPONSE_END);
     assert(state.ctx.response);
     assert(state.ctx.request);
+    assert(!state.ctx.error);
     if (!controller.signal.aborted) {
       state.currentStep = HTTP_STEP_RESPONSE_END;
-      state.ctx.response.timeOnEnd = calcTime(state.ctx);
+      state.ctx.response.timeOnEnd = calcContextTime();
       state.execute = null;
       if (onHttpResponseEnd) {
         try {
@@ -308,20 +312,20 @@ export default ({
     onWebSocket({
       ctx,
       onHttpResponseStartLine: (ret) => {
-        ctx.response.timeOnStartLine = calcTime(ctx);
+        ctx.response.timeOnStartLine = calcContextTime();;
         ctx.response.statusCode = ret.statusCode;
         ctx.response.statusText = ret.statusText;
         ctx.response.httpVersion = ret.httpVersion;
       },
       onHttpResponseHeader: (ret) => {
-        ctx.response.timeOnHeader = calcTime(ctx);
+        ctx.response.timeOnHeader = calcContextTime();;
         ctx.response.headersRaw = ret.headersRaw;
         ctx.response.headers = ret.headers;
       },
       onHttpResponseBody: (chunk) => {
         ctx.response.bytesBody += chunk.length;
         if (ctx.response.timeOnBody == null) {
-          ctx.response.timeOnBody = calcTime(ctx);
+          ctx.response.timeOnBody = calcContextTime();
         }
       },
       onError: (error) => {
@@ -331,7 +335,7 @@ export default ({
         doSocketClose();
       },
       onConnect: () => {
-        ctx.response.timeOnConnect = calcTime(ctx);
+        ctx.response.timeOnConnect = calcContextTime();
         process.nextTick(() => {
           if (!controller.signal.aborted) {
             state.connector.detach();
@@ -347,7 +351,7 @@ export default ({
         state.bytesIncoming += chunk.length;
         ctx.request.bytesBody += chunk.length;
         if (ctx.request.timeOnBody == null) {
-          ctx.response.timeOnBody = calcTime(state.ctx);
+          ctx.response.timeOnBody = calcContextTime();
         }
       },
     });
@@ -418,7 +422,7 @@ export default ({
     state.execute = decodeHttpRequest({
       onStartLine: async (ret) => {
         state.currentStep = HTTP_STEP_REQUEST_START_LINE;
-        ctx.request.timeOnStartLine = calcTime(ctx);
+        ctx.request.timeOnStartLine = calcContextTime();
         ctx.request.httpVersion = ret.httpVersion;
         ctx.request.method = ret.method;
         ctx.request.url = ret.path;
@@ -447,7 +451,7 @@ export default ({
         state.currentStep = HTTP_STEP_REQUEST_HEADER;
         ctx.request.headersRaw = ret.headersRaw;
         ctx.request.headers = ret.headers;
-        ctx.request.timeOnHeader = calcTime(ctx);
+        ctx.request.timeOnHeader = calcContextTime();
         if (onHttpRequestHeader) {
           await onHttpRequestHeader(ctx);
           assert(!controller.signal.aborted);
@@ -467,7 +471,7 @@ export default ({
         assert(!controller.signal.aborted);
         assert(!ctx.request.connection);
         if (ctx.request.timeOnBody == null) {
-          ctx.request.timeOnBody = calcTime(ctx);
+          ctx.request.timeOnBody = calcContextTime();
           if (state.currentStep < HTTP_STEP_REQUEST_BODY) {
             state.currentStep = HTTP_STEP_REQUEST_BODY;
           }
@@ -483,7 +487,7 @@ export default ({
           if (state.currentStep < HTTP_STEP_REQUEST_END) {
             state.currentStep = HTTP_STEP_REQUEST_END;
           }
-          ctx.request.timeOnEnd = calcTime(ctx);
+          ctx.request.timeOnEnd = calcContextTime();
           if (ctx.request.timeOnBody == null) {
             ctx.request.timeOnBody = ctx.request.timeOnEnd;
           }
