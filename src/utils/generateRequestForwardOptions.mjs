@@ -44,18 +44,28 @@ export default (options, request) => {
   if (!validate(options)) {
     throw new Error(JSON.stringify(options.error));
   }
-  if (!httpRequestValidate(request)) {
-    throw new Error(JSON.stringify(httpRequestValidate.error));
+  if (request) {
+    if (!httpRequestValidate(request)) {
+      throw new Error(JSON.stringify(httpRequestValidate.error));
+    }
   }
   const requestForwardOptions = {
     method: options.method,
     path: options.path,
   };
   if (requestForwardOptions.method == null) {
-    requestForwardOptions.method = request.method;
+    if (request) {
+      requestForwardOptions.method = request.method;
+    } else {
+      requestForwardOptions.method = 'GET';
+    }
   }
   if (requestForwardOptions.path == null) {
-    requestForwardOptions.path = request.path;
+    if (request) {
+      requestForwardOptions.path = request.path;
+    } else {
+      requestForwardOptions.path = '/';
+    }
   }
   if (options.headers) {
     requestForwardOptions.headers = convertObjectToArray(options.headers);
@@ -63,9 +73,14 @@ export default (options, request) => {
       requestForwardOptions.headers.push('Host');
       requestForwardOptions.headers.push(`${options.hostname || '127.0.0.1'}:${options.port}`);
     }
-  } else {
+  } else if (request) {
     requestForwardOptions.headers = [
       ...filterHeaders(request.headersRaw, ['host']),
+      'Host',
+      `${options.hostname || '127.0.0.1'}:${options.port}`,
+    ];
+  } else {
+    requestForwardOptions.headers = [
       'Host',
       `${options.hostname || '127.0.0.1'}:${options.port}`,
     ];

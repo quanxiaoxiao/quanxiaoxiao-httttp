@@ -159,6 +159,17 @@ test('generateRequestForwardOptions', () => {
     },
   );
 
+  ret = generateRequestForwardOptions(
+    {
+      port: 801,
+    },
+  );
+
+  assert.deepEqual(
+    ret,
+    { method: 'GET', path: '/', headers: ['Host', '127.0.0.1:801']},
+  );
+
   assert.throws(() => {
     generateRequestForwardOptions(
       {
