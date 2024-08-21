@@ -40,7 +40,11 @@ export default async (ctx) => {
   };
 
   try {
-    await waitConnect(ctx.requestForward.socket, 1000 * 10, ctx.signal);
+    await waitConnect(
+      ctx.requestForward.socket,
+      ctx.forward.timeout ?? 1000 * 10,
+      ctx.signal,
+    );
     ctx.requestForward.timeOnConnect = performance.now() - ctx.request.timeOnStart;
     if (ctx.forward.onConnect) {
       await ctx.forward.onConnect();
