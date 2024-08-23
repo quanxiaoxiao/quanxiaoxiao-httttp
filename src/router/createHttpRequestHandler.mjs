@@ -169,13 +169,15 @@ export default ({
     if (ctx.request.method) {
       message = `${ctx.request.method} ${ctx.request.path} ${ctx.error.response.statusCode} \`${ctx.error.message}\``;
     }
-    if (logger && logger.warn) {
-      logger.warn(message);
-    } else {
-      console.warn(message);
-    }
-    if (ctx.error.response.statusCode >= 500 && ctx.error.response.statusCode <= 599) {
-      console.error(ctx.error);
+    if (ctx.error.code !== 'ABORT_ERR') {
+      if (logger && logger.warn) {
+        logger.warn(message);
+      } else {
+        console.warn(message);
+      }
+      if (ctx.error.response.statusCode >= 500 && ctx.error.response.statusCode <= 599) {
+        console.error(ctx.error);
+      }
     }
   },
   onSocketClose: (data, ctx) => {
