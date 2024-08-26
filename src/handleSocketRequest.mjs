@@ -495,9 +495,8 @@ export default ({
             }
             if (onHttpRequestEnd) {
               await onHttpRequestEnd(ctx);
-              assert(!controller.signal.aborted);
             }
-            if (ret.dataBuf.length > 0) {
+            if (!controller.signal.aborted && ret.dataBuf.length > 0) {
               ctx.error = createError(400);
               doResponseError();
             }
