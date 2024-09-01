@@ -145,17 +145,20 @@ export default ({
         if (ctx.response.body instanceof Readable
           && ctx.response.body.readable
         ) {
-          if (ctx.response.headers && ctx.response.headers['content-length'] === 0) {
-            ctx.response.body = null;
-            ctx.response.data = null;
-          } else {
-            const buf = await readStream(ctx.response.body, ctx.signal);
-            ctx.response.body = buf;
-            ctx.response.data = decodeContentToJSON(buf, ctx.response.headers);
+          if (ctx.response.headers) {
+            if (ctx.response.headers['content-length'] === 0) {
+              ctx.response.body = null;
+              ctx.response.data = null;
+            } else if (/application\/json/i.test(ctx.response.headers['content-type']) && !ctx.signal.aborted) {
+              const buf = await readStream(ctx.response.body, ctx.signal);
+              ctx.response.body = buf;
+              ctx.response.data = ctx.routeMatched.select(decodeContentToJSON(buf, ctx.response.headers));
+            }
           }
         }
+      } else {
+        ctx.response.data = ctx.routeMatched.select(ctx.response.data);
       }
-      ctx.response.data = ctx.routeMatched.select(ctx.response.data);
     }
   },
   onHttpResponseEnd: (ctx) => {
