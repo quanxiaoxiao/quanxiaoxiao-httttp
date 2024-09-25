@@ -19,7 +19,7 @@ const _getPort = () => {
 
 const getPort = _getPort();
 
-test('createHttpRequestHandler', async () => {
+test('createHttpRequestHandler', { only: true }, async () => {
   const port = getPort();
   const routeMatchList = generateRouteMatchList({
     '/test': {
@@ -40,6 +40,14 @@ test('createHttpRequestHandler', async () => {
             body:  'xxx',
           };
         }
+      },
+    },
+    '/aa/cc/*pathname.ts': {
+      get: (ctx) => {
+        assert.equal(ctx.request.params.pathname, `333/2022/${encodeURIComponent('哈哈')}`);
+        ctx.response = {
+          body: 'cccc',
+        };
       },
     },
     '/validate': {
@@ -87,6 +95,14 @@ test('createHttpRequestHandler', async () => {
     () => getSocketConnect({ port }),
   );
   assert.equal(ret.statusCode, 404);
+  ret = await request(
+    {
+      path: `/aa/cc/333/2022/${encodeURIComponent('哈哈')}.ts`,
+    },
+    () => getSocketConnect({ port }),
+  );
+  assert.equal(ret.statusCode, 200);
+  assert.equal(ret.body.toString(), 'cccc');
   ret = await request(
     {
       path: '/test',
