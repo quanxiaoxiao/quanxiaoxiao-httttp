@@ -42,7 +42,7 @@ test('generateRouteMatchList', () => {
   }).length, 0);
   assert.equal(generateRouteMatchList({
     '/quan': {},
-    '{/rice}?/aaa': {},
+    '{/rice}/aaa': {},
   }).length, 2);
   assert.equal(generateRouteMatchList({
     '/quan': {},
