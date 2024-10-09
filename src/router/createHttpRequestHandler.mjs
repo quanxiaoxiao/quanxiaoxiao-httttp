@@ -43,10 +43,16 @@ export default ({
     }
     if (ctx.routeMatched) {
       ctx.request.params = ctx.routeMatched.urlMatch(ctx.request.pathname).params;
-      if (ctx.routeMatched.query) {
+      if (ctx.requestHandler && ctx.requestHandler.query) {
+        ctx.request.query = ctx.requestHandler.query(ctx.request.query);
+      } else if (ctx.routeMatched.query) {
         ctx.request.query = ctx.routeMatched.query(ctx.request.query);
       }
-      if (ctx.routeMatched.match && !ctx.routeMatched.match(ctx.request)) {
+      if (ctx.requestHandler && ctx.requestHandler.match) {
+        if (!ctx.requestHandler.match(ctx.request)) {
+          throw createError(400);
+        }
+      } else if (ctx.routeMatched.match && !ctx.routeMatched.match(ctx.request)) {
         throw createError(400);
       }
       if (ctx.socket.writable && ctx.routeMatched.onPre) {

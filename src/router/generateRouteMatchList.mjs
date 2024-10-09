@@ -22,11 +22,13 @@ export default (routes) => {
       const routeItem = {
         pathname,
         urlMatch: match(pathname, { encode: false, decode: false }),
-        match: d.match ? compare(d.match) : null,
         meta: d,
       };
       if (d.select) {
         routeItem.select = select(d.select);
+      }
+      if (d.match) {
+        routeItem.match = compare(d.match);
       }
       if (!_.isEmpty(d.query)) {
         routeItem.query = select({
@@ -56,6 +58,15 @@ export default (routes) => {
               const ajv = new Ajv();
               routeItem[httpMethod].validate = ajv.compile(handler.validate);
             }
+          }
+          if (!_.isEmpty(handler.query)) {
+            routeItem[httpMethod].query = select({
+              type: 'object',
+              properties: handler.query,
+            });
+          }
+          if (handler.match) {
+            routeItem[httpMethod].match = compare(handler.match);
           }
         }
       }

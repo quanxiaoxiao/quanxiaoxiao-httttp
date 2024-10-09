@@ -704,3 +704,75 @@ test('createHttpRequestHandler forward headers onPre', async () => {
   server1.close();
   server2.close();
 });
+
+
+test('createHttpRequestHandler 3333', async () => {
+  const port = getPort();
+  const routeMatchList = generateRouteMatchList({
+    '/test/123': {
+      query: {
+        name: {
+          type: 'string',
+        },
+        age: {
+          type: 'integer',
+        },
+      },
+      match: {
+        'query.name': {
+          $eq: 'quan1',
+        },
+      },
+      get: {
+        query: {
+          foo: {
+            type: 'string',
+          },
+          bar: {
+            type: 'string',
+          },
+        },
+        match: {
+          'query.foo': {
+            $eq: 'ffff',
+          },
+        },
+        fn: (ctx) => {
+          assert.deepEqual(ctx.request.query, {
+            foo: 'ffff',
+            bar: 'bbb',
+          });
+          ctx.response = {
+            body:  'get',
+          };
+        },
+      },
+    },
+  });
+  const server = net.createServer((socket) => {
+    handleSocketRequest({
+      socket,
+      ...createHttpRequestHandler({
+        list: routeMatchList,
+      }),
+    });
+  });
+  server.listen(port);
+  await waitFor(100);
+  let ret = await request(
+    {
+      path: '/test/123?name=quan&age=33&foo=ffff&bar=bbb',
+    },
+    () => getSocketConnect({ port }),
+  );
+  assert.equal(ret.statusCode, 200);
+  assert.equal(ret.body.toString(), 'get');
+  ret = await request(
+    {
+      path: '/test/123?name=quan1&age=33&foo=ffff1&bar=bbb',
+    },
+    () => getSocketConnect({ port }),
+  );
+  assert.equal(ret.statusCode, 400);
+  server.close();
+});
