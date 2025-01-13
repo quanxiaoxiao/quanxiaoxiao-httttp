@@ -29,4 +29,3 @@ const validate = ajv.compile({
 });
 
 export default validate;
-

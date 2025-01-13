@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 import test from 'node:test';
+
 import generateRequestForwardOptions from './generateRequestForwardOptions.mjs';
 
 test('generateRequestForwardOptions', () => {
@@ -167,7 +168,7 @@ test('generateRequestForwardOptions', () => {
 
   assert.deepEqual(
     ret,
-    { method: 'GET', path: '/', headers: ['Host', '127.0.0.1:801']},
+    { method: 'GET', path: '/', headers: ['Host', '127.0.0.1:801'] },
   );
 
   assert.throws(() => {

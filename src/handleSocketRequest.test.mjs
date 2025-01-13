@@ -1,24 +1,26 @@
 /* eslint no-use-before-define: 0 */
+import assert from 'node:assert';
+import fs from 'node:fs';
+import net from 'node:net';
+import path from 'node:path';
+import process from 'node:process';
 import {
   PassThrough,
   Readable,
 } from 'node:stream';
-import fs from 'node:fs';
-import path from 'node:path';
-import { test, mock } from 'node:test';
-import process from 'node:process';
-import net from 'node:net';
-import assert from 'node:assert';
-import _ from 'lodash';
-import createError from 'http-errors';
-import { waitFor } from '@quanxiaoxiao/utils';
+import { mock,test } from 'node:test';
+
 import { getSocketConnect } from '@quanxiaoxiao/http-request';
-import { wrapStreamRead } from '@quanxiaoxiao/node-utils';
 import {
-  encodeHttp,
   decodeHttpResponse,
+  encodeHttp,
 } from '@quanxiaoxiao/http-utils';
+import { wrapStreamRead } from '@quanxiaoxiao/node-utils';
 import { createConnector } from '@quanxiaoxiao/socket';
+import { waitFor } from '@quanxiaoxiao/utils';
+import createError from 'http-errors';
+import _ from 'lodash';
+
 import handleSocketRequest from './handleSocketRequest.mjs';
 import readStream from './readStream.mjs';
 
@@ -1104,7 +1106,7 @@ test('handleSocketRequest ctx.response.body with stream 1', async () => {
   assert.equal(onClose.mock.calls.length, 0);
   assert.equal(onError.mock.calls.length, 0);
   const encode = encodeHttp({
-     headers: {},
+    headers: {},
   });
   assert.equal(
     Buffer.concat(onData.mock.calls.map((a) => a.arguments[0])).toString(),
@@ -1260,7 +1262,7 @@ test('handleSocketRequest ctx.response.body with stream close', async () => {
   assert.equal(onClose.mock.calls.length, 1);
   assert.equal(onError.mock.calls.length, 0);
   const encode = encodeHttp({
-     headers: {},
+    headers: {},
   });
   assert.equal(
     Buffer.concat(onData.mock.calls.map((a) => a.arguments[0])).toString(),
@@ -2027,7 +2029,6 @@ test('handleSocketRequest ctx.response.body stream wait', async () => {
   const onHttpRequestEnd = mock.fn(() => {
     assert.equal(onHttpResponse.mock.calls.length, 0);
   });
-
 
   const server = net.createServer((socket) => {
     handleSocketRequest({

@@ -1,9 +1,10 @@
-import Ajv from 'ajv';
 import {
-  filterHeaders,
   convertObjectToArray,
+  filterHeaders,
   getHeaderValue,
 } from '@quanxiaoxiao/http-utils';
+import Ajv from 'ajv';
+
 import httpRequestValidate from '../schemas/httpRequest.mjs';
 
 const ajv = new Ajv();

@@ -1,8 +1,10 @@
 /* eslint max-classes-per-file: 0 */
-import test from 'node:test';
 import assert from 'node:assert';
 import { STATUS_CODES } from 'node:http';
+import test from 'node:test';
+
 import createError from 'http-errors';
+
 import attachResponseError from './attachResponseError.mjs';
 
 test('attachResponseError', () => {

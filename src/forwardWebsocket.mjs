@@ -1,10 +1,11 @@
-import createError from 'http-errors';
-import { encodeHttp, decodeHttpResponse } from '@quanxiaoxiao/http-utils';
 import { getSocketConnect } from '@quanxiaoxiao/http-request';
+import { decodeHttpResponse,encodeHttp } from '@quanxiaoxiao/http-utils';
 import {
   pipeForward,
   waitConnect,
 } from '@quanxiaoxiao/socket';
+import createError from 'http-errors';
+
 import generateRequestForwardOptions from './utils/generateRequestForwardOptions.mjs';
 
 export default async ({
@@ -54,7 +55,7 @@ export default async ({
       onError,
       onClose,
       onIncoming: (chunk) => {
-         onChunkIncoming(chunk);
+        onChunkIncoming(chunk);
         if (options.onChunkIncoming) {
           options.onChunkIncoming(chunk);
         }

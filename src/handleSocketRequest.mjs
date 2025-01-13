@@ -4,44 +4,46 @@ import {
   Readable,
   Writable,
 } from 'node:stream';
-import createError from 'http-errors';
-import { createConnector } from '@quanxiaoxiao/socket';
+
 import {
+  DecodeHttpError,
   decodeHttpRequest,
   encodeHttp,
+  hasHttpBodyContent,
+  isWebSocketRequest,
   parseHttpPath,
   parseHttpUrl,
-  hasHttpBodyContent,
-  DecodeHttpError,
-  isWebSocketRequest,
 } from '@quanxiaoxiao/http-utils';
 import {
-  wrapStreamWrite,
   wrapStreamRead,
+  wrapStreamWrite,
 } from '@quanxiaoxiao/node-utils';
+import { createConnector } from '@quanxiaoxiao/socket';
+import createError from 'http-errors';
+
+import attachResponseError from './attachResponseError.mjs';
 import {
   HTTP_STEP_EMPTY,
+  HTTP_STEP_REQUEST_BODY,
+  HTTP_STEP_REQUEST_COMPLETE,
+  HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME,
+  HTTP_STEP_REQUEST_END,
+  HTTP_STEP_REQUEST_HEADER,
   HTTP_STEP_REQUEST_START,
   HTTP_STEP_REQUEST_START_LINE,
-  HTTP_STEP_REQUEST_HEADER,
-  HTTP_STEP_REQUEST_BODY,
-  HTTP_STEP_REQUEST_END,
-  HTTP_STEP_RESPONSE_WAIT,
-  HTTP_STEP_RESPONSE_START,
-  HTTP_STEP_REQUEST_COMPLETE,
+  HTTP_STEP_REQUEST_WEBSOCKET_CONNECTION,
+  HTTP_STEP_RESPONSE_END,
+  HTTP_STEP_RESPONSE_ERROR,
   HTTP_STEP_RESPONSE_HEADER_SPEND,
   HTTP_STEP_RESPONSE_READ_CONTENT_CHUNK,
   HTTP_STEP_RESPONSE_READ_CONTENT_END,
-  HTTP_STEP_RESPONSE_END,
-  HTTP_STEP_RESPONSE_ERROR,
-  HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME,
-  HTTP_STEP_REQUEST_WEBSOCKET_CONNECTION,
+  HTTP_STEP_RESPONSE_START,
+  HTTP_STEP_RESPONSE_WAIT,
 } from './constants.mjs';
-import attachResponseError from './attachResponseError.mjs';
-import generateResponse from './generateResponse.mjs';
 import generateRequestContext from './generateRequestContext.mjs';
-import promisess from './utils/promisess.mjs';
+import generateResponse from './generateResponse.mjs';
 import isSocketEnable from './isSocketEnable.mjs';
+import promisess from './utils/promisess.mjs';
 
 export default ({
   socket,
@@ -133,7 +135,7 @@ export default ({
     const { ctx } = state;
     if (!controller.signal.aborted && state.currentStep !== HTTP_STEP_RESPONSE_END) {
       if (state.currentStep >= HTTP_STEP_RESPONSE_HEADER_SPEND) {
-        shutdown(ctx.error);
+        shutdown(ctx.error); // eslint-disable-line no-use-before-define
       } else if (state.currentStep !== HTTP_STEP_RESPONSE_ERROR) {
         state.currentStep = HTTP_STEP_RESPONSE_ERROR;
         attachResponseError(ctx);
@@ -157,7 +159,7 @@ export default ({
         }
       }
     } else {
-      shutdown(ctx.error);
+      shutdown(ctx.error); // eslint-disable-line no-use-before-define
     }
   }
 
@@ -247,7 +249,7 @@ export default ({
     if (!controller.signal.aborted) {
       controller.abort();
     }
-    doSocketClose(error);
+    doSocketClose(error); // eslint-disable-line no-use-before-define
   }
 
   function attachRequestBodyBackpress() {
@@ -333,10 +335,10 @@ export default ({
         }
       },
       onError: (error) => {
-        doSocketClose(error);
+        doSocketClose(error); // eslint-disable-line no-use-before-define
       },
       onClose: () => {
-        doSocketClose();
+        doSocketClose(); // eslint-disable-line no-use-before-define
       },
       onConnect: () => {
         ctx.response.timeOnConnect = calcContextTime();

@@ -1,12 +1,14 @@
-import test from 'node:test';
 import assert from 'node:assert';
 import net from 'node:net';
+import test from 'node:test';
+
 import request, { getSocketConnect } from '@quanxiaoxiao/http-request';
 import { waitFor } from '@quanxiaoxiao/utils';
-import readStream from '../readStream.mjs';
+
 import handleSocketRequest from '../handleSocketRequest.mjs';
-import generateRouteMatchList from './generateRouteMatchList.mjs';
+import readStream from '../readStream.mjs';
 import createHttpRequestHandler from './createHttpRequestHandler.mjs';
+import generateRouteMatchList from './generateRouteMatchList.mjs';
 
 const _getPort = () => {
   let _port = 4750;
@@ -25,7 +27,7 @@ test('createHttpRequestHandler', { only: true }, async () => {
     '/test': {
       get: (ctx) => {
         ctx.response = {
-          body:  'aaa',
+          body: 'aaa',
         };
       },
       post: async (ctx) => {
@@ -37,7 +39,7 @@ test('createHttpRequestHandler', { only: true }, async () => {
           };
         } else {
           ctx.response = {
-            body:  'xxx',
+            body: 'xxx',
           };
         }
       },
@@ -604,7 +606,7 @@ test('createHttpRequestHandler forward headers', async () => {
   });
   server2.listen(port2);
   await waitFor(100);
-  let ret
+  let ret;
   ret = await request(
     {
       path: '/post/1',
@@ -705,7 +707,6 @@ test('createHttpRequestHandler forward headers onPre', async () => {
   server2.close();
 });
 
-
 test('createHttpRequestHandler 3333', async () => {
   const port = getPort();
   const routeMatchList = generateRouteMatchList({
@@ -743,7 +744,7 @@ test('createHttpRequestHandler 3333', async () => {
             bar: 'bbb',
           });
           ctx.response = {
-            body:  'get',
+            body: 'get',
           };
         },
       },

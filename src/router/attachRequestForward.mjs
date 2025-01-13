@@ -1,13 +1,15 @@
 import assert from 'node:assert';
 import { Buffer } from 'node:buffer';
 import {
-  Readable,
   PassThrough,
+  Readable,
   Writable,
 } from 'node:stream';
-import createError from 'http-errors';
-import { waitConnect } from '@quanxiaoxiao/socket';
+
 import request, { getSocketConnect } from '@quanxiaoxiao/http-request';
+import { waitConnect } from '@quanxiaoxiao/socket';
+import createError from 'http-errors';
+
 import generateRequestForwardOptions from '../utils/generateRequestForwardOptions.mjs';
 
 export default async (ctx) => {

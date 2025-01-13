@@ -1,9 +1,11 @@
-import test from 'node:test';
-import { PassThrough } from 'node:stream';
 import assert from 'node:assert';
-import zlib from 'node:zlib';
 import { STATUS_CODES } from 'node:http';
+import { PassThrough } from 'node:stream';
+import test from 'node:test';
+import zlib from 'node:zlib';
+
 import createError from 'http-errors';
+
 import generateResponse from './generateResponse.mjs';
 
 test('generateResponse', () => {

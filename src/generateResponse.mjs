@@ -1,15 +1,16 @@
-import { STATUS_CODES } from 'node:http';
-import { Buffer } from 'node:buffer';
-import { Readable } from 'node:stream';
 import assert from 'node:assert';
-import createError from 'http-errors';
+import { Buffer } from 'node:buffer';
+import { STATUS_CODES } from 'node:http';
+import { Readable } from 'node:stream';
+
 import {
   convertObjectToArray,
+  encodeContentEncoding,
   filterHeaders,
   getHeaderValue,
-  encodeContentEncoding,
   setHeaders,
 } from '@quanxiaoxiao/http-utils';
+import createError from 'http-errors';
 
 export default (ctx) => {
   assert(!ctx.error);

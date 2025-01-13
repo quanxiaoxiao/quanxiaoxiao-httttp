@@ -1,4 +1,5 @@
 import assert from 'node:assert';
+
 import { wrapStreamRead } from '@quanxiaoxiao/node-utils';
 
 export default async (stream, signal) => {
