@@ -1,6 +1,6 @@
 {
   "name": "@quanxiaoxiao/httttp",
-  "version": "0.101.0",
+  "version": "0.102.0",
   "type": "module",
   "scripts": {
     "test": "NODE_ENV=test node --test"
@@ -14,21 +14,21 @@
     "registry": "https://registry.npmjs.org"
   },
   "devDependencies": {
-    "@eslint/js": "^9.3.0",
-    "eslint": "^9.3.0",
+    "@eslint/js": "^9.22.0",
+    "eslint": "^9.22.0",
     "eslint-plugin-simple-import-sort": "^12.1.1",
-    "globals": "^15.9.0"
+    "globals": "^15.15.0"
   },
   "engines": {
     "node": ">= 20.0.0"
   },
   "dependencies": {
     "@quanxiaoxiao/compare": "^0.2.2",
-    "@quanxiaoxiao/datav": "^0.3.2",
-    "@quanxiaoxiao/http-request": "^0.57.0",
-    "@quanxiaoxiao/http-utils": "^0.27.0",
-    "@quanxiaoxiao/node-utils": "^0.15.0",
-    "@quanxiaoxiao/socket": "^0.17.0",
+    "@quanxiaoxiao/datav": "^0.4.0",
+    "@quanxiaoxiao/http-request": "^0.58.0",
+    "@quanxiaoxiao/http-utils": "^0.30.0",
+    "@quanxiaoxiao/node-utils": "^0.16.0",
+    "@quanxiaoxiao/socket": "^0.18.0",
     "ajv": "^8.16.0",
     "http-errors": "^2.0.0",
     "lodash": "^4.17.21",

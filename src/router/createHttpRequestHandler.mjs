@@ -8,7 +8,7 @@ import {
 import {
   decodeContentToJSON,
   hasHttpBodyContent,
-  isWebSocketRequest,
+  isHttpWebSocketUpgrade,
 } from '@quanxiaoxiao/http-utils';
 import createError from 'http-errors';
 import _ from 'lodash';
@@ -61,7 +61,7 @@ export default ({
         await ctx.routeMatched.onPre(ctx);
         assert(!ctx.signal.aborted);
       }
-      if (!isWebSocketRequest(ctx.request) && ctx.forward) {
+      if (!isHttpWebSocketUpgrade(ctx.request) && ctx.forward) {
         if (hasHttpBodyContent(ctx.request.headers)) {
           ctx.request.body = new PassThrough();
         }

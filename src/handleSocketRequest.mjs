@@ -10,7 +10,7 @@ import {
   decodeHttpRequest,
   encodeHttp,
   hasHttpBodyContent,
-  isWebSocketRequest,
+  isHttpWebSocketUpgrade,
   parseHttpPath,
   parseHttpUrl,
 } from '@quanxiaoxiao/http-utils';
@@ -282,7 +282,7 @@ export default ({
       } else {
         const type = typeof fn;
         if (type === 'string' || Buffer.isBuffer(fn)) {
-          ctx.request._write(type == 'string' ? Buffer.from(fn, 'utf8') : fn);
+          ctx.request._write(type === 'string' ? Buffer.from(fn, 'utf8') : fn);
           ctx.request._write();
         } else if (type === 'function') {
           ctx.request._write(fn);
@@ -462,7 +462,7 @@ export default ({
           await onHttpRequestHeader(ctx);
           assert(!controller.signal.aborted);
         }
-        if (isWebSocketRequest(ctx.request)) {
+        if (isHttpWebSocketUpgrade(ctx.request)) {
           doWebSocket();
         } else if (hasHttpBodyContent(ctx.request.headers)) {
           attachRequestBodyBackpress();

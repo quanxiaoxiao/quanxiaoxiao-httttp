@@ -1648,7 +1648,7 @@ test('handleSocketRequest request 2 1', async () => {
         },
         body: 'aaa',
       };
-    } else  {
+    } else {
       ctx.response = {
         headers: {
           Server: 'quan',
