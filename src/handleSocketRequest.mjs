@@ -133,7 +133,7 @@ export default ({
 
   function doResponseError() {
     const { ctx } = state;
-    if (!controller.signal.aborted && state.currentStep !== HTTP_STEP_RESPONSE_END) {
+    if (!socket.destroyed && !controller.signal.aborted && state.currentStep !== HTTP_STEP_RESPONSE_END) {
       if (state.currentStep >= HTTP_STEP_RESPONSE_HEADER_SPEND) {
         shutdown(ctx.error); // eslint-disable-line no-use-before-define
       } else if (state.currentStep !== HTTP_STEP_RESPONSE_ERROR) {
@@ -449,6 +449,7 @@ export default ({
         if (onHttpRequestStartLine) {
           await onHttpRequestStartLine(ctx);
           assert(ctx.response == null);
+          assert(!socket.destroyed);
           assert(!controller.signal.aborted);
         }
       },
@@ -460,6 +461,7 @@ export default ({
         ctx.request.timeOnHeader = calcContextTime();
         if (onHttpRequestHeader) {
           await onHttpRequestHeader(ctx);
+          assert(!socket.destroyed);
           assert(!controller.signal.aborted);
         }
         if (isHttpWebSocketUpgrade(ctx.request)) {
@@ -474,6 +476,7 @@ export default ({
         }
       },
       onBody: (chunk) => {
+        assert(!socket.destroyed);
         assert(!controller.signal.aborted);
         assert(!ctx.request.connection);
         if (ctx.request.timeOnBody == null) {
