@@ -7,6 +7,7 @@ import {
 
 import {
   decodeContentToJSON,
+  getHeaderValue,
   hasHttpBodyContent,
   isHttpWebSocketUpgrade,
 } from '@quanxiaoxiao/http-utils';
@@ -154,10 +155,12 @@ export default ({
           && ctx.response.body.readable
         ) {
           if (ctx.response.headers) {
-            if (ctx.response.headers['content-length'] === 0) {
+            const contentLengthWithResponse = getHeaderValue(ctx.response.headers, 'content-length');
+            const contentTypeWithResponse = getHeaderValue(ctx.response.headers, 'content-type');
+            if (contentLengthWithResponse === 0) {
               ctx.response.body = null;
               ctx.response.data = null;
-            } else if (/application\/json/i.test(ctx.response.headers['content-type']) && !ctx.signal.aborted) {
+            } else if (contentTypeWithResponse && /application\/json/i.test(contentTypeWithResponse) && !ctx.signal.aborted) {
               const buf = await readStream(ctx.response.body, ctx.signal);
               ctx.response.body = buf;
               ctx.response.data = ctx.routeMatched.select(decodeContentToJSON(buf, ctx.response.headers));
