@@ -9,6 +9,7 @@ import {
   DecodeHttpError,
   decodeHttpRequest,
   encodeHttp,
+  getHeaderValue,
   hasHttpBodyContent,
   isHttpWebSocketUpgrade,
   parseHttpPath,
@@ -180,10 +181,11 @@ export default ({
     assert(state.currentStep < HTTP_STEP_RESPONSE_START);
     state.currentStep = HTTP_STEP_RESPONSE_START;
     assert(ctx.error == null);
+    const contentLengthWithResponse = ctx.response && ctx.response.headers ? getHeaderValue(ctx.response.headers, 'content-length') : null;
     if (ctx.response
       && ctx.response.body instanceof Readable
       && ctx.response.body.readable
-      && (!ctx.response.headers || ctx.response.headers['content-length'] !== 0)
+      && contentLengthWithResponse !== 0
     ) {
       assert(!Object.hasOwnProperty.call(ctx.response, 'data'));
       const encodeHttpResponse = encodeHttp({
