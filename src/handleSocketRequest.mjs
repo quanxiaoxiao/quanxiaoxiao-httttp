@@ -594,14 +594,12 @@ export default ({
                   if (state.ctx.error == null) {
                     state.ctx.error = error;
                   }
-                  if (!controller.signal.aborted) {
-                    if (error instanceof DecodeHttpError) {
-                      shutdown(error);
-                    } else {
-                      doResponseError();
-                    }
-                  } else {
+                  if (controller.signal.aborted) {
                     shutdown(state.ctx.error);
+                  } else if (error instanceof DecodeHttpError) {
+                    shutdown(error);
+                  } else {
+                    doResponseError();
                   }
                 },
               );
