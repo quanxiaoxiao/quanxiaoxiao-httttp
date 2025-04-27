@@ -45,30 +45,35 @@ export default ({
         ctx.requestHandler = null;
       }
     }
-    if (ctx.routeMatched) {
-      ctx.request.params = ctx.routeMatched.urlMatch(ctx.request.pathname).params;
-      if (ctx.requestHandler && ctx.requestHandler.query) {
-        ctx.request.query = ctx.requestHandler.query(ctx.request.query);
-      } else if (ctx.routeMatched.query) {
-        ctx.request.query = ctx.routeMatched.query(ctx.request.query);
-      }
-      if (ctx.requestHandler && ctx.requestHandler.match) {
-        if (!ctx.requestHandler.match(ctx.request)) {
-          throw createError(400);
-        }
-      } else if (ctx.routeMatched.match && !ctx.routeMatched.match(ctx.request)) {
+    if (!ctx.routeMatched) {
+      return;
+    }
+    ctx.request.params = ctx.routeMatched.urlMatch(ctx.request.pathname).params;
+
+    if (ctx.requestHandler && ctx.requestHandler.query) {
+      ctx.request.query = ctx.requestHandler.query(ctx.request.query);
+    } else if (ctx.routeMatched.query) {
+      ctx.request.query = ctx.routeMatched.query(ctx.request.query);
+    }
+
+    if (ctx.requestHandler && ctx.requestHandler.match) {
+      if (!ctx.requestHandler.match(ctx.request)) {
         throw createError(400);
       }
-      if (ctx.socket.writable && ctx.routeMatched.onPre) {
-        await ctx.routeMatched.onPre(ctx);
-        assert(!ctx.signal.aborted);
+    } else if (ctx.routeMatched.match && !ctx.routeMatched.match(ctx.request)) {
+      throw createError(400);
+    }
+    if (ctx.socket.writable && ctx.routeMatched.onPre) {
+      await ctx.routeMatched.onPre(ctx);
+      assert(!ctx.socket.destroyed);
+      assert(!ctx.signal.aborted);
+    }
+
+    if (!isHttpWebSocketUpgrade(ctx.request) && ctx.forward) {
+      if (hasHttpBodyContent(ctx.request.headers)) {
+        ctx.request.body = new PassThrough();
       }
-      if (!isHttpWebSocketUpgrade(ctx.request) && ctx.forward) {
-        if (hasHttpBodyContent(ctx.request.headers)) {
-          ctx.request.body = new PassThrough();
-        }
-        await attachRequestForward(ctx);
-      }
+      await attachRequestForward(ctx);
     }
   },
   onWebSocket: async ({ ctx, ...hooks }) => {
