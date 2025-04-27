@@ -55,6 +55,9 @@ export default async (ctx) => {
       assert(!ctx.socket.destroyed);
     }
   } catch (error) {
+    if (!ctx.signal.aborted && !ctx.socket.destroyed && ctx.forward.onError) {
+      ctx.forward.onError(error, ctx);
+    }
     if (ctx.signal.aborted || ctx.socket.destroyed) {
       throw error;
     }
