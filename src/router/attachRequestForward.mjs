@@ -48,17 +48,20 @@ export default async (ctx) => {
       ctx.signal,
     );
     ctx.requestForward.timeOnConnect = performance.now() - ctx.request.timeOnStart;
+    assert(!ctx.socket.destroyed);
     if (ctx.forward.onConnect) {
       await ctx.forward.onConnect();
       assert(!ctx.signal.aborted);
+      assert(!ctx.socket.destroyed);
     }
   } catch (error) {
-    if (ctx.signal.aborted) {
+    if (ctx.signal.aborted || ctx.socket.destroyed) {
       throw error;
     }
     console.warn(error);
     throw createError(502);
   }
+
   if (Object.hasOwnProperty.call(ctx.forward, 'body')) {
     ctx.requestForward.request.body = ctx.forward.body;
   } else if (ctx.request.body instanceof Readable
@@ -97,6 +100,7 @@ export default async (ctx) => {
         if (ctx.forward.onHttpResponseStartLine) {
           await ctx.forward.onHttpResponseStartLine(ctx);
           assert(!ctx.signal.aborted);
+          assert(!ctx.socket.destroyed);
         }
       },
       onHeader: async (ret) => {
@@ -106,6 +110,7 @@ export default async (ctx) => {
         if (ctx.forward.onHttpResponseHeader) {
           await ctx.forward.onHttpResponseHeader(ctx);
           assert(!ctx.signal.aborted);
+          assert(!ctx.socket.destroyed);
         }
         if (ctx.requestForward._promise) {
           ctx.requestForward._promise();
@@ -118,7 +123,7 @@ export default async (ctx) => {
     .then(
       () => {},
       (error) => {
-        if (!ctx.signal.aborted) {
+        if (!ctx.signal.aborted && !ctx.socket.destroyed) {
           if (ctx.error == null) {
             ctx.error = error;
           }

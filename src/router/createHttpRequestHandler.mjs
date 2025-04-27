@@ -145,6 +145,7 @@ export default ({
           });
         });
         assert(!ctx.signal.aborted);
+        assert(!ctx.socket.destroyed);
         if (ctx.response == null) {
           ctx.response = {
             ...ctx.requestForward.response,
@@ -173,8 +174,10 @@ export default ({
               ctx.response.data = null;
             } else if (contentTypeWithResponse && /application\/json/i.test(contentTypeWithResponse) && !ctx.signal.aborted) {
               const buf = await readStream(ctx.response.body, ctx.signal);
-              ctx.response.body = buf;
-              ctx.response.data = ctx.routeMatched.select(decodeContentToJSON(buf, ctx.response.headers));
+              if (!ctx.socket.destroyed) {
+                ctx.response.body = buf;
+                ctx.response.data = ctx.routeMatched.select(decodeContentToJSON(buf, ctx.response.headers));
+              }
             }
           }
         }
