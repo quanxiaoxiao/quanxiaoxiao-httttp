@@ -182,11 +182,11 @@ export default ({
     state.currentStep = HTTP_STEP_RESPONSE_START;
     assert(ctx.error == null);
     const contentLengthWithResponse = ctx.response && ctx.response.headers ? getHeaderValue(ctx.response.headers, 'content-length') : null;
-    if (ctx.response
+    const hasReadableResponseBody = ctx.response
       && ctx.response.body instanceof Readable
-      && ctx.response.body.readable
-      && contentLengthWithResponse !== 0
-    ) {
+      && ctx.response.body.readable;
+
+    if (hasReadableResponseBody && contentLengthWithResponse !== 0) {
       assert(!Object.hasOwnProperty.call(ctx.response, 'data'));
       const encodeHttpResponse = encodeHttp({
         statusCode: ctx.response.statusCode,
@@ -198,10 +198,10 @@ export default ({
         },
       });
       process.nextTick(() => {
-        if (!controller.signal.aborted
+        const isReadableAndReady = !controller.signal.aborted
           && ctx.response.body.readable
-          && state.currentStep === HTTP_STEP_RESPONSE_HEADER_SPEND
-        ) {
+          && state.currentStep === HTTP_STEP_RESPONSE_HEADER_SPEND;
+        if (isReadableAndReady) {
           state.currentStep = HTTP_STEP_RESPONSE_READ_CONTENT_CHUNK;
           wrapStreamRead({
             signal: controller.signal,
