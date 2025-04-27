@@ -39,6 +39,7 @@ export default ({
     if (onRequest) {
       await onRequest(ctx);
       assert(!ctx.signal.aborted);
+      assert(!ctx.socket.destroyed);
       if (ctx.response) {
         ctx.routeMatched = null;
         ctx.requestHandler = null;
