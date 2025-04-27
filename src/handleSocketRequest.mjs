@@ -177,6 +177,9 @@ export default ({
   }
 
   function doResponse() {
+    if (socket.destroyed) {
+      return;
+    }
     const { ctx } = state;
     assert(state.currentStep < HTTP_STEP_RESPONSE_START);
     state.currentStep = HTTP_STEP_RESPONSE_START;
@@ -384,9 +387,7 @@ export default ({
                 doResponse(ctx);
               }
             },
-            (error) => {
-              handleHttpError(error);
-            },
+            handleHttpError,
           );
       } else {
         doResponse(ctx);
@@ -582,6 +583,7 @@ export default ({
 
   state.connector = createConnector(
     {
+      timeout: 1000 * 60,
       onData: (chunk) => {
         if (chunk.length > 0) {
           updateTimeOnLastIncoming();
