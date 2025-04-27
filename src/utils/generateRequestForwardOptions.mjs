@@ -9,7 +9,7 @@ import httpRequestValidate from '../schemas/httpRequest.mjs';
 
 const ajv = new Ajv();
 
-const validate = ajv.compile({
+const optionsSchema = {
   type: 'object',
   properties: {
     port: {
@@ -39,58 +39,58 @@ const validate = ajv.compile({
     },
   },
   required: ['port'],
-});
+};
+
+const optionsValidate = ajv.compile(optionsSchema);
+
+const getDefaultHostHeader = (options) => `${options.hostname || '127.0.0.1'}:${options.port}`;
+
+const validateRequest = (request) => {
+  if (request && !httpRequestValidate(request)) {
+    throw new Error(JSON.stringify(httpRequestValidate.errors));
+  }
+};
+
+const getMethod = (options, request) => options.method ?? request?.method ?? 'GET';
+
+const getPath = (options, request) => options.path ?? request?.path ?? '/';
+
+const processHeaders = (options, request) => {
+  const headers = options.headers
+    ? convertObjectToArray(options.headers)
+    : request
+      ? filterHeaders(request.headersRaw, ['host'])
+      : [];
+
+  if (!getHeaderValue(headers, 'host')) {
+    headers.push('Host', getDefaultHostHeader(options));
+  }
+
+  return headers;
+};
+
+const addRemoteAddressHeader = (headers, remoteAddress) => {
+  if (remoteAddress) {
+    headers = filterHeaders(headers, ['x-remote-address']);
+    headers.push('X-Remote-Address', remoteAddress);
+  }
+  return headers;
+};
 
 export default (options, request) => {
-  if (!validate(options)) {
+  if (!optionsValidate(options)) {
     throw new Error(JSON.stringify(options.error));
   }
-  if (request) {
-    if (!httpRequestValidate(request)) {
-      throw new Error(JSON.stringify(httpRequestValidate.error));
-    }
-  }
-  const requestForwardOptions = {
-    method: options.method,
-    path: options.path,
-  };
-  if (requestForwardOptions.method == null) {
-    if (request) {
-      requestForwardOptions.method = request.method;
-    } else {
-      requestForwardOptions.method = 'GET';
-    }
-  }
-  if (requestForwardOptions.path == null) {
-    if (request) {
-      requestForwardOptions.path = request.path;
-    } else {
-      requestForwardOptions.path = '/';
-    }
-  }
-  if (options.headers) {
-    requestForwardOptions.headers = convertObjectToArray(options.headers);
-    if (!getHeaderValue(requestForwardOptions.headers, 'host')) {
-      requestForwardOptions.headers.push('Host');
-      requestForwardOptions.headers.push(`${options.hostname || '127.0.0.1'}:${options.port}`);
-    }
-  } else if (request) {
-    requestForwardOptions.headers = [
-      ...filterHeaders(request.headersRaw, ['host']),
-      'Host',
-      `${options.hostname || '127.0.0.1'}:${options.port}`,
-    ];
-  } else {
-    requestForwardOptions.headers = [
-      'Host',
-      `${options.hostname || '127.0.0.1'}:${options.port}`,
-    ];
-  }
-  if (options.remoteAddress) {
-    requestForwardOptions.headers = filterHeaders(requestForwardOptions.headers, ['x-remote-address']);
-    requestForwardOptions.headers.push('X-Remote-Address');
-    requestForwardOptions.headers.push(options.remoteAddress);
-  }
+  validateRequest(request);
 
+  const requestForwardOptions = {
+    method: getMethod(options, request),
+    path: getPath(options, request),
+    headers: processHeaders(options, request),
+  };
+  requestForwardOptions.headers = addRemoteAddressHeader(
+    requestForwardOptions.headers,
+    options.remoteAddress,
+  );
   return requestForwardOptions;
 };

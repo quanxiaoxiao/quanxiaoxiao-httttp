@@ -63,6 +63,7 @@ export default ({
     } else if (ctx.routeMatched.match && !ctx.routeMatched.match(ctx.request)) {
       throw createError(400);
     }
+
     if (ctx.socket.writable && ctx.routeMatched.onPre) {
       await ctx.routeMatched.onPre(ctx);
       assert(!ctx.socket.destroyed);
@@ -99,36 +100,40 @@ export default ({
     });
   },
   onHttpRequestEnd: async (ctx) => {
-    if (!ctx.request.connection && ctx.requestHandler) {
-      if (ctx.forward) {
-        assert(ctx.requestForward);
-        await ctx.requestHandler.fn(ctx);
-      } else {
-        if (ctx.request.end) {
-          if (ctx.request.body instanceof Writable && !ctx.request.body.writableEnded) {
-            ctx.request.end();
-            if (ctx.request.body instanceof Readable) {
-              const buf = await readStream(ctx.request.body, ctx.signal);
-              ctx.request.body = buf;
-            }
-          }
-          if (ctx.requestHandler.validate && Buffer.isBuffer(ctx.request.body)) {
-            try {
-              ctx.request.data = decodeContentToJSON(ctx.request.body, ctx.request.headers);
-            } catch (error) {
-              console.warn(error);
-              throw createError(400);
-            }
-          }
-        }
-        if (ctx.requestHandler.validate && !ctx.requestHandler.validate(ctx.request.data)) {
-          throw createError(400, JSON.stringify(ctx.requestHandler.validate.errors));
-        }
-        await ctx.requestHandler.fn(ctx);
-        if (ctx.forward) {
-          await attachRequestForward(ctx);
+    if (ctx.request.connection || !ctx.requestHandler) {
+      return;
+    }
+    if (ctx.forward) {
+      assert(ctx.requestForward);
+      await ctx.requestHandler.fn(ctx);
+      return;
+    }
+
+    if (ctx.request.end) {
+      if (ctx.request.body instanceof Writable && !ctx.request.body.writableEnded) {
+        ctx.request.end();
+
+        if (ctx.request.body instanceof Readable) {
+          const buf = await readStream(ctx.request.body, ctx.signal);
+          ctx.request.body = buf;
         }
       }
+
+      if (ctx.requestHandler.validate && Buffer.isBuffer(ctx.request.body)) {
+        try {
+          ctx.request.data = decodeContentToJSON(ctx.request.body, ctx.request.headers);
+        } catch (error) {
+          console.warn(error);
+          throw createError(400);
+        }
+      }
+    }
+    if (ctx.requestHandler.validate && !ctx.requestHandler.validate(ctx.request.data)) {
+      throw createError(400, JSON.stringify(ctx.requestHandler.validate.errors));
+    }
+    await ctx.requestHandler.fn(ctx);
+    if (ctx.forward) {
+      await attachRequestForward(ctx);
     }
   },
   onHttpResponse: async (ctx) => {
