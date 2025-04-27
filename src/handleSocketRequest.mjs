@@ -540,36 +540,43 @@ export default ({
     });
   };
 
+  function initializeNewRequest() {
+    state.currentStep = HTTP_STEP_REQUEST_START;
+    state.count += 1;
+    state.ctx = generateRequestContext();
+    Object.assign(state.ctx, {
+      socket,
+      signal: controller.signal,
+    });
+    if (onHttpRequest) {
+      onHttpRequest({
+        dateTimeCreate: state.dateTimeCreate,
+        bytesIncoming: state.bytesIncoming,
+        bytesOutgoing: state.bytesOutgoing,
+        count: state.count,
+        remoteAddress: socket.remoteAddress,
+        ctx: state.ctx,
+      });
+      if (state.ctx.ws) {
+        assert(state.ctx.ws instanceof Writable && state.ctx.ws.writable);
+      }
+    }
+    bindExcute();
+  }
+
   function checkRequestChunk(chunk) {
     assert(!controller.signal.aborted);
     state.bytesIncoming += chunk.length;
-    if (state.currentStep >= HTTP_STEP_REQUEST_END
-      && state.currentStep !== HTTP_STEP_RESPONSE_END) {
+    if (state.currentStep >= HTTP_STEP_REQUEST_END && state.currentStep !== HTTP_STEP_RESPONSE_END) {
       handleHttpError(createError(400));
-    } else if (state.currentStep === HTTP_STEP_EMPTY || state.currentStep === HTTP_STEP_RESPONSE_END) {
+      return;
+    }
+    if (state.currentStep === HTTP_STEP_EMPTY || state.currentStep === HTTP_STEP_RESPONSE_END) {
       assert(state.execute == null);
       if (state.currentStep === HTTP_STEP_EMPTY) {
         assert(state.ctx === null);
       }
-      state.currentStep = HTTP_STEP_REQUEST_START;
-      state.count += 1;
-      state.ctx = generateRequestContext();
-      state.ctx.socket = socket;
-      state.ctx.signal = controller.signal;
-      if (onHttpRequest) {
-        onHttpRequest({
-          dateTimeCreate: state.dateTimeCreate,
-          bytesIncoming: state.bytesIncoming,
-          bytesOutgoing: state.bytesOutgoing,
-          count: state.count,
-          remoteAddress: socket.remoteAddress,
-          ctx: state.ctx,
-        });
-        if (state.ctx.ws) {
-          assert(state.ctx.ws instanceof Writable && state.ctx.ws.writable);
-        }
-      }
-      bindExcute();
+      initializeNewRequest();
     }
   }
 
