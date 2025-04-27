@@ -112,20 +112,22 @@ export default ({
   }
 
   function doResponseEnd() {
-    assert(state.ctx != null);
-    assert(state.currentStep < HTTP_STEP_RESPONSE_END);
-    assert(state.ctx.response);
-    assert(state.ctx.request);
-    assert(!state.ctx.error);
-    if (!controller.signal.aborted) {
-      state.currentStep = HTTP_STEP_RESPONSE_END;
-      state.ctx.response.timeOnEnd = calcContextTime();
-      state.execute = null;
-      if (onHttpResponseEnd) {
-        try {
-          onHttpResponseEnd(state.ctx);
-        } catch (error) {
-          console.warn(error);
+    if (!socket.destroyed) {
+      assert(state.ctx != null);
+      assert(state.currentStep < HTTP_STEP_RESPONSE_END);
+      assert(state.ctx.response);
+      assert(state.ctx.request);
+      assert(!state.ctx.error);
+      if (!controller.signal.aborted) {
+        state.currentStep = HTTP_STEP_RESPONSE_END;
+        state.ctx.response.timeOnEnd = calcContextTime();
+        state.execute = null;
+        if (onHttpResponseEnd) {
+          try {
+            onHttpResponseEnd(state.ctx);
+          } catch (error) {
+            console.warn(error);
+          }
         }
       }
     }
