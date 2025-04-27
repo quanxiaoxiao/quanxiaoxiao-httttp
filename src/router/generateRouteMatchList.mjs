@@ -6,47 +6,44 @@ import Ajv from 'ajv';
 import _ from 'lodash';
 import { match } from 'path-to-regexp';
 
-const httpMethodList = ['get', 'post', 'put', 'delete'];
+const HTTP_METHODS = ['get', 'post', 'put', 'delete'];
+const PATHNAME_REGEX = /^{\/[^}]+}/;
 
 export default (routes) => {
   assert(_.isPlainObject(routes));
-  const pathnameList = Object.keys(routes);
-  const result = [];
-  for (let i = 0; i < pathnameList.length; i++) {
-    const pathname = pathnameList[i];
-    if (pathname[0] !== '/' && !/^{\/[^}]+}/.test(pathname)) {
+  return Object.entries(routes).reduce((result, [pathname, routeConfig]) => {
+    if (pathname[0] !== '/' && !PATHNAME_REGEX.test(pathname)) {
       console.warn(`\`${pathname}\` pathname invalid`);
-      continue;
+      return result;
     }
-    const d = routes[pathname];
     try {
       const routeItem = {
         pathname,
         urlMatch: match(pathname, { encode: false, decode: false }),
-        meta: d,
+        meta: routeConfig,
       };
-      if (d.select) {
-        routeItem.select = select(d.select);
+      if (routeConfig.select) {
+        routeItem.select = select(routeConfig.select);
       }
-      if (d.match) {
-        routeItem.match = compare(d.match);
+      if (routeConfig.match) {
+        routeItem.match = compare(routeConfig.match);
       }
-      if (!_.isEmpty(d.query)) {
+      if (!_.isEmpty(routeConfig.query)) {
         routeItem.query = select({
           type: 'object',
-          properties: d.query,
+          properties: routeConfig.query,
         });
       }
-      if (d.onPre) {
-        routeItem.onPre = d.onPre;
+      if (routeConfig.onPre) {
+        routeItem.onPre = routeConfig.onPre;
       }
-      if (d.onPost) {
-        routeItem.onPost = d.onPost;
+      if (routeConfig.onPost) {
+        routeItem.onPost = routeConfig.onPost;
       }
-      for (let j = 0; j < httpMethodList.length; j++) {
-        const handler = d[httpMethodList[j]];
+      for (let j = 0; j < HTTP_METHODS.length; j++) {
+        const handler = routeConfig[HTTP_METHODS[j]];
         if (handler) {
-          const httpMethod = httpMethodList[j].toUpperCase();
+          const httpMethod = HTTP_METHODS[j].toUpperCase();
           routeItem[httpMethod] = {
             fn: handler,
             validate: null,
@@ -71,11 +68,13 @@ export default (routes) => {
           }
         }
       }
-      result.push(routeItem);
+      return [
+        ...result,
+        routeItem,
+      ];
     } catch (error) {
       console.warn(`\`${pathname}\` parse route fail, ${error.message}`);
-      continue;
+      return result;
     }
-  }
-  return result;
+  }, []);
 };
