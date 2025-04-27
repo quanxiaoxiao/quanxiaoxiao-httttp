@@ -37,35 +37,36 @@ export default (routes) => {
       if (routeConfig.onPre) {
         routeItem.onPre = routeConfig.onPre;
       }
+
       if (routeConfig.onPost) {
         routeItem.onPost = routeConfig.onPost;
       }
-      for (let j = 0; j < HTTP_METHODS.length; j++) {
-        const handler = routeConfig[HTTP_METHODS[j]];
-        if (handler) {
-          const httpMethod = HTTP_METHODS[j].toUpperCase();
-          routeItem[httpMethod] = {
-            fn: handler,
-            validate: null,
-          };
-          if (typeof handler !== 'function') {
-            assert(_.isPlainObject(handler));
-            assert(typeof handler.fn === 'function');
-            routeItem[httpMethod].fn = handler.fn;
-            if (handler.validate) {
-              const ajv = new Ajv();
-              routeItem[httpMethod].validate = ajv.compile(handler.validate);
-            }
-          }
-          if (!_.isEmpty(handler.query)) {
-            routeItem[httpMethod].query = select({
-              type: 'object',
-              properties: handler.query,
-            });
-          }
-          if (handler.match) {
-            routeItem[httpMethod].match = compare(handler.match);
-          }
+
+      for (const method of HTTP_METHODS) {
+        const handlerConfig = routeConfig[method];
+        if (!handlerConfig) {
+          continue;
+        }
+        const httpMethod = method.toUpperCase();
+        const handler = typeof handlerConfig === 'function'
+          ? { fn: handlerConfig }
+          : handlerConfig;
+        assert(_.isPlainObject(handler), 'Handler must be an object');
+        assert(typeof handler.fn === 'function', 'Handler must have a function');
+
+        routeItem[httpMethod] = {
+          fn: handler.fn,
+          validate: handler.validate ? (new Ajv()).compile(handler.validate) : null,
+        };
+
+        if (!_.isEmpty(handler.query)) {
+          routeItem[httpMethod].query = select({
+            type: 'object',
+            properties: handler.query,
+          });
+        }
+        if (handler.match) {
+          routeItem[httpMethod].match = compare(handler.match);
         }
       }
       return [
