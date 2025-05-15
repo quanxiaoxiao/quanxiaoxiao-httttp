@@ -20,7 +20,9 @@ import attachRequestForward from './attachRequestForward.mjs';
 
 export default ({
   list: routeMatchList,
+  onCors,
   onRequest,
+  onResponse,
   logger,
 }) => ({
   onHttpRequestStartLine: (ctx) => {
@@ -33,6 +35,10 @@ export default ({
   onHttpRequestHeader: async (ctx) => {
     const requestHandler = ctx.routeMatched[ctx.request.method];
     if (!requestHandler) {
+      if (ctx.request.method === 'OPTIONS' && onCors) {
+        onCors(ctx);
+        return;
+      }
       throw createError(405);
     }
     ctx.requestHandler = requestHandler;
@@ -137,7 +143,7 @@ export default ({
     }
   },
   onHttpResponse: async (ctx) => {
-    if (!ctx.response && ctx.requestForward) {
+    if (ctx.request.method !== 'OPTIONS' && !ctx.response && ctx.requestForward) {
       if (ctx.requestForward.timeOnResponseHeader == null) {
         await new Promise((resolve) => {
           ctx.requestForward.promise(() => {
@@ -161,7 +167,7 @@ export default ({
       console.warn(`${ctx.request.method} ${ctx.request.path} ctx.response unconfig`);
       throw createError(503);
     }
-    if (ctx.routeMatched && ctx.routeMatched.select) {
+    if (ctx.request.method !== 'OPTIONS' && ctx.routeMatched && ctx.routeMatched.select) {
       if (!Object.hasOwnProperty.call(ctx.response, 'data')) {
         if (ctx.response.body instanceof Readable
           && ctx.response.body.readable
@@ -185,9 +191,12 @@ export default ({
         ctx.response.data = ctx.routeMatched.select(ctx.response.data);
       }
     }
+    if (onResponse) {
+      await onResponse(ctx);
+    }
   },
   onHttpResponseEnd: (ctx) => {
-    if (ctx.routeMatched && ctx.routeMatched.onPost) {
+    if (ctx.request.method !== 'OPTIONS' && ctx.routeMatched && ctx.routeMatched.onPost) {
       ctx.routeMatched.onPost(ctx);
     }
   },
