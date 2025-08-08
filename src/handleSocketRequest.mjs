@@ -269,6 +269,9 @@ export default ({
       stream: ctx.request.body,
       signal: controller.signal,
       onPause: () => {
+        if (ctx.request.isPauseDisable) {
+          return;
+        }
         state.connector.pause();
       },
       onDrain: () => {

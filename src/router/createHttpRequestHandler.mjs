@@ -76,11 +76,16 @@ export default ({
       assert(!ctx.signal.aborted);
     }
 
-    if (!isHttpWebSocketUpgrade(ctx.request) && ctx.forward) {
-      if (hasHttpBodyContent(ctx.request.headers)) {
-        ctx.request.body = new PassThrough();
+    if (!isHttpWebSocketUpgrade(ctx.request)) {
+      if (ctx.requestHandler.validate) {
+        ctx.request.isPauseDisable = true;
       }
-      await attachRequestForward(ctx);
+      if (ctx.forward) {
+        if (hasHttpBodyContent(ctx.request.headers)) {
+          ctx.request.body = new PassThrough();
+        }
+        await attachRequestForward(ctx);
+      }
     }
   },
   onWebSocket: async ({ ctx, ...hooks }) => {
