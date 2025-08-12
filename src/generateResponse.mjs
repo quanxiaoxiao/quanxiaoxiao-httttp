@@ -78,9 +78,10 @@ export default (ctx) => {
       && ctx.request.headers['accept-encoding']
       && !getHeaderValue(response.headers, 'content-encoding')
     ) {
+      const acceptEncoding = ctx.request.headers['accept-encoding'];
       const ret = encodeContentEncoding(
         response.body,
-        ctx.request.headers['accept-encoding'],
+        Array.isArray(acceptEncoding) ? acceptEncoding.join(',') : acceptEncoding,
       );
       if (ret.name) {
         response.headers = setHeaders(
