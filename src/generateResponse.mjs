@@ -12,6 +12,10 @@ import {
 } from '@quanxiaoxiao/http-utils';
 import createError from 'http-errors';
 
+const validateStatusCode = (statusCode) => {
+  assert(statusCode >= 0 && statusCode <= 999, 'response statusCode invalid');
+};
+
 export default (ctx) => {
   assert(!ctx.error);
   if (!ctx.response) {
@@ -67,7 +71,7 @@ export default (ctx) => {
       );
     }
   }
-  assert(response.statusCode >= 0 && response.statusCode <= 999);
+  validateStatusCode(response.statusCode);
   if (response.body != null) {
     if (typeof response.body === 'string') {
       response.body = Buffer.from(response.body);
