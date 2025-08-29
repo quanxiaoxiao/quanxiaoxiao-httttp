@@ -76,6 +76,21 @@ const createRequestContext = () => ({
   error: null,
 });
 
+const createInitialState = () => ({
+  ctx: null,
+  isSocketCloseEmit: false,
+  dateTimeCreate: Date.now(),
+  timeOnStart: performance.now(),
+  timeOnLastIncoming: null,
+  timeOnLastOutgoing: null,
+  bytesIncoming: 0,
+  bytesOutgoing: 0,
+  count: 0,
+  currentStep: HTTP_STEP_EMPTY,
+  execute: null,
+  connector: null,
+});
+
 export default ({
   socket,
   onWebSocket,
@@ -93,20 +108,7 @@ export default ({
   }
   const controller = new AbortController();
 
-  const state = {
-    ctx: null,
-    isSocketCloseEmit: false,
-    dateTimeCreate: Date.now(),
-    timeOnStart: performance.now(),
-    timeOnLastIncoming: null,
-    timeOnLastOutgoing: null,
-    bytesIncoming: 0,
-    bytesOutgoing: 0,
-    count: 0,
-    currentStep: HTTP_STEP_EMPTY,
-    execute: null,
-    connector: null,
-  };
+  const state = createInitialState();
 
   function updateTimeOnLastIncoming() {
     state.timeOnLastIncoming = performance.now() - state.timeOnStart;
