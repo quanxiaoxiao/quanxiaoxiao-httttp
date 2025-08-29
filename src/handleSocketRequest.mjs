@@ -100,6 +100,25 @@ const createTimeUpdater = (state) => ({
   },
 });
 
+const createStateManager = (state, controller) => ({
+  isValid: () => !controller.signal.aborted && state.ctx && !state.ctx.error,
+  isSocketValid: (socket) => !socket.destroyed && !controller.signal.aborted,
+  canTransitionToStep: (targetStep) => state.currentStep < targetStep,
+  setStep: (step) => {
+    state.currentStep = step;
+  },
+  setError: (error) => {
+    if (!state.ctx.error) {
+      state.ctx.error = error;
+    }
+  },
+});
+
+const calcContextTime = (ctx) => {
+  assert(ctx?.request, 'Context request is required');
+  return performance.now() - ctx.request.timeOnStart;
+};
+
 export default ({
   socket,
   onWebSocket,
@@ -118,11 +137,9 @@ export default ({
   const controller = new AbortController();
   const state = createInitialState();
   const timeUpdater = createTimeUpdater(state);
+  const stateManager = createStateManager(state, controller);
 
-  function calcContextTime() {
-    assert(state.ctx && state.ctx.request);
-    return performance.now() - state.ctx.request.timeOnStart;
-  }
+  state.stateManager = stateManager;
 
   function doChunkOutgoning(chunk) {
     const size = chunk.length;
@@ -154,7 +171,7 @@ export default ({
       assert(!state.ctx.error);
       if (!controller.signal.aborted) {
         state.currentStep = HTTP_STEP_RESPONSE_END;
-        state.ctx.response.timeOnEnd = calcContextTime();
+        state.ctx.response.timeOnEnd = calcContextTime(state.ctx);
         state.execute = null;
         if (onHttpResponseEnd) {
           try {
@@ -361,20 +378,20 @@ export default ({
     onWebSocket({
       ctx,
       onHttpResponseStartLine: (ret) => {
-        ctx.response.timeOnStartLine = calcContextTime();;
+        ctx.response.timeOnStartLine = calcContextTime(ctx);;
         ctx.response.statusCode = ret.statusCode;
         ctx.response.statusText = ret.statusText;
         ctx.response.httpVersion = ret.httpVersion;
       },
       onHttpResponseHeader: (ret) => {
-        ctx.response.timeOnHeader = calcContextTime();;
+        ctx.response.timeOnHeader = calcContextTime(ctx);;
         ctx.response.headersRaw = ret.headersRaw;
         ctx.response.headers = ret.headers;
       },
       onHttpResponseBody: (chunk) => {
         ctx.response.bytesBody += chunk.length;
         if (ctx.response.timeOnBody == null) {
-          ctx.response.timeOnBody = calcContextTime();
+          ctx.response.timeOnBody = calcContextTime(ctx);
         }
       },
       onError: (error) => {
@@ -384,7 +401,7 @@ export default ({
         doSocketClose(); // eslint-disable-line no-use-before-define
       },
       onConnect: () => {
-        ctx.response.timeOnConnect = calcContextTime();
+        ctx.response.timeOnConnect = calcContextTime(ctx);
         process.nextTick(() => {
           if (!controller.signal.aborted) {
             state.connector.detach();
@@ -400,7 +417,7 @@ export default ({
         state.bytesIncoming += chunk.length;
         ctx.request.bytesBody += chunk.length;
         if (ctx.request.timeOnBody == null) {
-          ctx.response.timeOnBody = calcContextTime();
+          ctx.response.timeOnBody = calcContextTime(ctx);
         }
       },
     });
@@ -468,8 +485,8 @@ export default ({
     const { ctx } = state;
     state.execute = decodeHttpRequest({
       onStartLine: async (ret) => {
-        state.currentStep = HTTP_STEP_REQUEST_START_LINE;
-        ctx.request.timeOnStartLine = calcContextTime();
+        stateManager.setStep(HTTP_STEP_REQUEST_START_LINE);
+        ctx.request.timeOnStartLine = calcContextTime(ctx);
         ctx.request.httpVersion = ret.httpVersion;
         ctx.request.method = ret.method;
         ctx.request.url = ret.path;
@@ -500,7 +517,7 @@ export default ({
         Object.assign(ctx.request, {
           headersRaw: ret.headersRaw,
           headers: ret.headers,
-          timeOnHeader: calcContextTime(),
+          timeOnHeader: calcContextTime(ctx),
         });
         if (onHttpRequestHeader) {
           await onHttpRequestHeader(ctx);
@@ -524,7 +541,7 @@ export default ({
         assert(!controller.signal.aborted);
         assert(!ctx.request.connection);
         if (ctx.request.timeOnBody == null) {
-          ctx.request.timeOnBody = calcContextTime();
+          ctx.request.timeOnBody = calcContextTime(ctx);
           if (state.currentStep < HTTP_STEP_REQUEST_BODY) {
             state.currentStep = HTTP_STEP_REQUEST_BODY;
           }
@@ -545,7 +562,7 @@ export default ({
           state.currentStep = HTTP_STEP_REQUEST_END;
         }
 
-        ctx.request.timeOnEnd = calcContextTime();
+        ctx.request.timeOnEnd = calcContextTime(ctx);
         ctx.request.timeOnBody ??= ctx.request.timeOnEnd;
 
         if (onHttpRequestEnd) {
@@ -577,8 +594,8 @@ export default ({
     });
   };
 
-  function initializeNewRequest() {
-    state.currentStep = HTTP_STEP_REQUEST_START;
+  function initializeRequest() {
+    stateManager.setStep(HTTP_STEP_REQUEST_START);
     state.count += 1;
     state.ctx = createRequestContext();
     Object.assign(state.ctx, {
@@ -601,19 +618,23 @@ export default ({
     bindExcute();
   }
 
-  function checkRequestChunk(chunk) {
-    assert(!controller.signal.aborted);
+  function processChunk(chunk) {
+    assert(!controller.signal.aborted, 'Controller should not be aborted');
+
     state.bytesIncoming += chunk.length;
-    if (state.currentStep >= HTTP_STEP_REQUEST_END && state.currentStep !== HTTP_STEP_RESPONSE_END) {
+    const isInvalidState = state.currentStep >= HTTP_STEP_REQUEST_END && state.currentStep !== HTTP_STEP_RESPONSE_END;
+    if (isInvalidState) {
       handleHttpError(createError(400));
       return;
     }
-    if (state.currentStep === HTTP_STEP_EMPTY || state.currentStep === HTTP_STEP_RESPONSE_END) {
-      assert(state.execute == null);
+    const shouldInitialize = state.currentStep === HTTP_STEP_EMPTY ||
+    state.currentStep === HTTP_STEP_RESPONSE_END;
+    if (shouldInitialize) {
+      assert(!state.execute, 'Execute should be null');
       if (state.currentStep === HTTP_STEP_EMPTY) {
-        assert(state.ctx === null);
+        assert(!state.ctx, 'Context should be null');
       }
-      initializeNewRequest();
+      initializeRequest();
     }
   }
 
@@ -625,7 +646,7 @@ export default ({
           return;
         }
         timeUpdater.updateIncoming();
-        checkRequestChunk(chunk);
+        processChunk(chunk);
         if (!controller.signal.aborted) {
           state.execute(chunk)
             .then(
