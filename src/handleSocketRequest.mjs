@@ -149,6 +149,15 @@ const safeExecuteHandler = (handler) => async (...args) => {
   }
 };
 
+const hasStreamResponseBody = (ctx) => {
+  const contentLength = ctx.response?.headers
+    ? getHeaderValue(ctx.response.headers, 'content-length')
+    : null;
+  return ctx.response?.body instanceof Readable &&
+    ctx.response.body.readable &&
+    contentLength !== 0;
+};
+
 export default ({
   socket,
   onWebSocket,
@@ -256,78 +265,82 @@ export default ({
     }
   }
 
+  const handleStaticResponse = (ctx) => {
+    try {
+      const chunk = encodeHttp(generateResponse(ctx));
+      stateManager.setStep(HTTP_STEP_RESPONSE_HEADER_SPEND);
+      doChunkOutgoning(chunk);
+      doResponseEnd();
+    } catch (error) {
+      handleHttpError(error, ctx);
+    }
+  };
+
+  const handleStreamResponse = (ctx) => {
+    assert(!Object.hasOwnProperty.call(ctx.response, 'data'), 'Response should not have data property');
+
+    const encodeHttpResponse = encodeHttp({
+      statusCode: ctx.response.statusCode,
+      headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
+      body: ctx.response.body,
+      onHeader: (chunk) => {
+        stateManager.setStep(HTTP_STEP_RESPONSE_HEADER_SPEND);
+        doChunkOutgoning(chunk);
+      },
+    });
+    process.nextTick(() => {
+      const isReadableAndReady = !controller.signal.aborted
+          && ctx.response.body.readable
+          && state.currentStep === HTTP_STEP_RESPONSE_HEADER_SPEND;
+      if (isReadableAndReady) {
+        state.currentStep = HTTP_STEP_RESPONSE_READ_CONTENT_CHUNK;
+        wrapStreamRead({
+          signal: controller.signal,
+          stream: ctx.response.body,
+          onData: (chunk) => doChunkOutgoning(encodeHttpResponse(chunk)),
+          onEnd: () => {
+            const chunk = encodeHttpResponse();
+            stateManager.setStep(HTTP_STEP_RESPONSE_READ_CONTENT_END);
+            doChunkOutgoning(chunk);
+            if (!state.ctx.error) {
+              doResponseEnd();
+            }
+          },
+          onError: (error) => {
+            if (!state.ctx.error) {
+              state.ctx.error = error;
+            }
+            if (!controller.signal.aborted) {
+              console.warn(`response.body stream error \`${error.message}\``);
+              state.connector();
+              controller.abort();
+            }
+          },
+        });
+      } else {
+        if (!controller.signal.aborted) {
+          state.connector();
+          controller.abort();
+        }
+        if (!ctx.response.body.destroyed) {
+          ctx.response.body.destroy();
+        }
+      }
+    });
+  };
+
   function doResponse() {
-    if (socket.destroyed) {
+    if (socket.destroyed || controller.signal.aborted) {
       return;
     }
     const { ctx } = state;
-    assert(state.currentStep < HTTP_STEP_RESPONSE_START);
-    state.currentStep = HTTP_STEP_RESPONSE_START;
-    assert(ctx.error == null);
-    const contentLengthWithResponse = ctx.response && ctx.response.headers ? getHeaderValue(ctx.response.headers, 'content-length') : null;
-    const hasReadableResponseBody = ctx.response
-      && ctx.response.body instanceof Readable
-      && ctx.response.body.readable;
-
-    if (hasReadableResponseBody && contentLengthWithResponse !== 0) {
-      assert(!Object.hasOwnProperty.call(ctx.response, 'data'));
-      const encodeHttpResponse = encodeHttp({
-        statusCode: ctx.response.statusCode,
-        headers: ctx.response._headers || ctx.response.headersRaw || ctx.response.headers,
-        body: ctx.response.body,
-        onHeader: (chunk) => {
-          state.currentStep = HTTP_STEP_RESPONSE_HEADER_SPEND;
-          doChunkOutgoning(chunk);
-        },
-      });
-      process.nextTick(() => {
-        const isReadableAndReady = !controller.signal.aborted
-          && ctx.response.body.readable
-          && state.currentStep === HTTP_STEP_RESPONSE_HEADER_SPEND;
-        if (isReadableAndReady) {
-          state.currentStep = HTTP_STEP_RESPONSE_READ_CONTENT_CHUNK;
-          wrapStreamRead({
-            signal: controller.signal,
-            stream: ctx.response.body,
-            onData: (chunk) => doChunkOutgoning(encodeHttpResponse(chunk)),
-            onEnd: () => {
-              const chunk = encodeHttpResponse();
-              state.currentStep = HTTP_STEP_RESPONSE_READ_CONTENT_END;
-              doChunkOutgoning(chunk);
-              if (!state.ctx.error) {
-                doResponseEnd();
-              }
-            },
-            onError: (error) => {
-              if (state.ctx.error == null) {
-                state.ctx.error = error;
-              }
-              if (!controller.signal.aborted) {
-                console.warn(`response.body stream error \`${error.message}\``);
-                state.connector();
-                controller.abort();
-              }
-            },
-          });
-        } else {
-          if (!controller.signal.aborted) {
-            state.connector();
-            controller.abort();
-          }
-          if (!ctx.response.body.destroyed) {
-            ctx.response.body.destroy();
-          }
-        }
-      });
+    assert(state.currentStep < HTTP_STEP_RESPONSE_START, 'Invalid step for response');
+    stateManager.setStep(HTTP_STEP_RESPONSE_START);
+    assert(!ctx.error, 'No error should exist during response');
+    if (hasStreamResponseBody(ctx)) {
+      handleStreamResponse(ctx);
     } else {
-      try {
-        const chunk = encodeHttp(generateResponse(ctx));
-        state.currentStep = HTTP_STEP_RESPONSE_HEADER_SPEND;
-        doChunkOutgoning(chunk);
-        doResponseEnd();
-      } catch (error) {
-        handleHttpError(error, ctx);
-      }
+      handleStaticResponse(ctx);
     }
   }
 
@@ -458,26 +471,23 @@ export default ({
 
   function doHttpRequestComplete() {
     const { ctx } = state;
-    assert(!controller.signal.aborted);
-    assert(ctx.error == null);
-    assert(state.currentStep < HTTP_STEP_REQUEST_COMPLETE);
-    state.currentStep = HTTP_STEP_REQUEST_COMPLETE;
-    if (state.currentStep === HTTP_STEP_REQUEST_COMPLETE
-      || state.currentStep === HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME) {
-      if (onHttpResponse) {
-        state.currentStep = HTTP_STEP_RESPONSE_WAIT;
-        promisess(onHttpResponse, ctx)
-          .then(
-            () => {
-              if (!controller.signal.aborted) {
-                doResponse(ctx);
-              }
-            },
-            handleHttpError,
-          );
-      } else {
-        doResponse(ctx);
-      }
+    assert(!controller.signal.aborted, 'Controller should not be aborted');
+    assert(!ctx.error, 'No error should exist');
+    assert(state.currentStep < HTTP_STEP_REQUEST_COMPLETE, 'Invalid step transition');
+    stateManager.setStep(HTTP_STEP_REQUEST_COMPLETE);
+    if (onHttpResponse) {
+      stateManager.setStep(HTTP_STEP_RESPONSE_WAIT);
+      promisess(onHttpResponse, ctx)
+        .then(
+          () => {
+            if (!controller.signal.aborted) {
+              doResponse(ctx);
+            }
+          },
+          handleHttpError,
+        );
+    } else {
+      doResponse(ctx);
     }
   }
 
@@ -557,12 +567,12 @@ export default ({
       },
       onBody: (chunk) => {
         assert(!socket.destroyed);
-        assert(!controller.signal.aborted);
-        assert(!ctx.request.connection);
+        assert(!controller.signal.aborted, 'Controller should not be aborted');
+        assert(!ctx.request.connection, 'Should not be WebSocket connection');
         if (ctx.request.timeOnBody == null) {
           ctx.request.timeOnBody = calcContextTime(ctx);
           if (state.currentStep < HTTP_STEP_REQUEST_BODY) {
-            state.currentStep = HTTP_STEP_REQUEST_BODY;
+            stateManager.setStep(HTTP_STEP_REQUEST_BODY);
           }
         }
         ctx.request._write(chunk);
@@ -573,30 +583,29 @@ export default ({
         }
 
         if (ctx.request._write) {
-          assert(ctx.request.body instanceof Writable);
-          assert(!ctx.request.body.writableEnded);
+          assert(ctx.request.body instanceof Writable && !ctx.request.body.writableEnded,
+            'Body must be writable and not ended');
         }
 
         if (state.currentStep < HTTP_STEP_REQUEST_END) {
-          state.currentStep = HTTP_STEP_REQUEST_END;
+          stateManager.setStep(HTTP_STEP_REQUEST_END);
         }
 
         ctx.request.timeOnEnd = calcContextTime(ctx);
         ctx.request.timeOnBody ??= ctx.request.timeOnEnd;
 
-        if (onHttpRequestEnd) {
-          await onHttpRequestEnd(ctx);
-          assert(!socket.destroyed);
+        await safeExecuteHandler(onHttpRequestEnd)(ctx);
+        assert(!socket.destroyed);
+
+        if (controller.signal.aborted || ctx.error) {
+          return;
         }
-        if (!controller.signal.aborted && ret.dataBuf.length > 0) {
+
+        if (ret.dataBuf.length > 0) {
           ctx.error = createError(400);
           doResponseError();
           return;
         }
-
-        if (controller.signal.aborted || ctx.error) {
-          return;
-        };
 
         const shouldWaitForConsume = !ctx.response
           && ctx.request.end
@@ -604,7 +613,7 @@ export default ({
           && !ctx.request.body.writableEnded;
 
         if (shouldWaitForConsume) {
-          state.currentStep = HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME;
+          stateManager.setStep(HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME);
           ctx.request.end(doHttpRequestComplete);
         } else {
           doHttpRequestComplete();
