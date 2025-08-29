@@ -119,6 +119,36 @@ const calcContextTime = (ctx) => {
   return performance.now() - ctx.request.timeOnStart;
 };
 
+const parseRequestPath = (path) => {
+  if (/^https?:\/\//.test(path)) {
+    const urlParseResult = parseHttpUrl(path);
+    const [pathname, querystring, query] = parseHttpPath(urlParseResult.path);
+    return {
+      path: urlParseResult.path,
+      pathname,
+      querystring,
+      query,
+    };
+  }
+  const [pathname, querystring, query] = parseHttpPath(path);
+  return {
+    path,
+    pathname,
+    querystring,
+    query,
+  };
+};
+
+const safeExecuteHandler = (handler) => async (...args) => {
+  if (!handler) return;
+  try {
+    await handler(...args);
+  } catch (error) {
+    console.warn('Handler execution error:', error);
+    throw error;
+  }
+};
+
 export default ({
   socket,
   onWebSocket,
@@ -309,20 +339,22 @@ export default ({
     doSocketClose(error); // eslint-disable-line no-use-before-define
   }
 
-  function attachRequestBodyBackpress() {
+  function createRequestBodyHandler() {
     const { ctx } = state;
+
     if (ctx.request.body == null) {
       ctx.request.body = new PassThrough();
     }
-    assert(ctx.request.body instanceof Writable);
+
+    assert(ctx.request.body instanceof Writable, 'Request body must be writable');
+
     ctx.request._write = wrapStreamWrite({
       stream: ctx.request.body,
       signal: controller.signal,
       onPause: () => {
-        if (ctx.request.isPauseDisable) {
-          return;
+        if (!ctx.request.isPauseDisable) {
+          state.connector.pause();
         }
-        state.connector.pause();
       },
       onDrain: () => {
         state.connector.resume();
@@ -330,22 +362,23 @@ export default ({
       onError: (error) => {
         if (!controller.signal.aborted) {
           if (!ctx.error) {
-            ctx.error = new Error(`request body stream, \`${error.message}\``);
+            ctx.error = new Error(`Request body stream error: ${error.message}`);
           }
           doResponseError();
         }
       },
     });
-    ctx.request.end = (fn) => {
-      if (fn == null) {
+
+    ctx.request.end = (data) => {
+      if (data == null) {
         ctx.request._write();
       } else {
-        const type = typeof fn;
-        if (type === 'string' || Buffer.isBuffer(fn)) {
-          ctx.request._write(type === 'string' ? Buffer.from(fn, 'utf8') : fn);
+        const type = typeof data;
+        if (type === 'string' || Buffer.isBuffer(data)) {
+          ctx.request._write(type === 'string' ? Buffer.from(data, 'utf8') : data);
           ctx.request._write();
         } else if (type === 'function') {
-          ctx.request._write(fn);
+          ctx.request._write(data);
         } else {
           ctx.request._write();
         }
@@ -487,48 +520,34 @@ export default ({
       onStartLine: async (ret) => {
         stateManager.setStep(HTTP_STEP_REQUEST_START_LINE);
         ctx.request.timeOnStartLine = calcContextTime(ctx);
-        ctx.request.httpVersion = ret.httpVersion;
-        ctx.request.method = ret.method;
-        ctx.request.url = ret.path;
-        if (/^https?:\/\//.test(ret.path)) {
-          const urlParseResult = parseHttpUrl(ret.path);
-          const [pathname, querystring, query] = parseHttpPath(urlParseResult.path);
-          ctx.request.path = urlParseResult.path;
-          ctx.request.pathname = pathname;
-          ctx.request.querystring = querystring;
-          ctx.request.query = query;
-        } else {
-          const [pathname, querystring, query] = parseHttpPath(ret.path);
-          ctx.request.path = ret.path;
-          ctx.request.pathname = pathname;
-          ctx.request.querystring = querystring;
-          ctx.request.query = query;
-        }
-        if (onHttpRequestStartLine) {
-          await onHttpRequestStartLine(ctx);
-          assert(ctx.response == null);
-          assert(!socket.destroyed);
-          assert(!controller.signal.aborted);
-        }
+
+        Object.assign(ctx.request, {
+          httpVersion: ret.httpVersion,
+          method: ret.method,
+          url: ret.path,
+          ...parseRequestPath(ret.path),
+        });
+        await safeExecuteHandler(onHttpRequestStartLine)(ctx);
+        assert(!ctx.response, 'Response should not exist yet');
+        assert(!socket.destroyed);
+        assert(!controller.signal.aborted, 'Controller should not be aborted');
       },
       onHeader: async (ret) => {
-        assert(state.currentStep === HTTP_STEP_REQUEST_START_LINE);
-        state.currentStep = HTTP_STEP_REQUEST_HEADER;
+        assert(state.currentStep === HTTP_STEP_REQUEST_START_LINE, 'Invalid step');
+        stateManager.setStep(HTTP_STEP_REQUEST_HEADER);
         Object.assign(ctx.request, {
           headersRaw: ret.headersRaw,
           headers: ret.headers,
           timeOnHeader: calcContextTime(ctx),
         });
-        if (onHttpRequestHeader) {
-          await onHttpRequestHeader(ctx);
-          assert(!socket.destroyed);
-          assert(!controller.signal.aborted);
-        }
+        await safeExecuteHandler(onHttpRequestHeader)(ctx);
+        assert(!controller.signal.aborted, 'Controller should not be aborted');
+        assert(!socket.destroyed);
 
         if (isHttpWebSocketUpgrade(ctx.request)) {
           doUpgradeWebSocket();
         } else if (hasHttpBodyContent(ctx.request.headers)) {
-          attachRequestBodyBackpress();
+          createRequestBodyHandler();
         } else if (ctx.request.body != null) {
           if (ctx.request.body instanceof Writable && !ctx.request.body.destroyed) {
             ctx.request.body.destroy();
