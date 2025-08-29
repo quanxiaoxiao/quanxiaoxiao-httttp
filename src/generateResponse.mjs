@@ -13,11 +13,30 @@ import {
 import createError from 'http-errors';
 
 const validateStatusCode = (statusCode) => {
-  assert(statusCode >= 0 && statusCode <= 999, 'response statusCode invalid');
+  assert(Number.isInteger(statusCode) && statusCode >= 0 && statusCode <= 999, `Invalid response statusCode: ${statusCode}`);
+};
+
+const handleJsonData = (data, headers) => {
+  if (data == null) {
+    return {
+      body: null,
+      headers,
+    };
+  }
+
+  const jsonBody = Buffer.from(JSON.stringify(data));
+  const filteredHeaders = filterHeaders(headers, ['content-encoding', 'content-type']);
+
+  return {
+    body: jsonBody,
+    headers: setHeaders(filteredHeaders, {
+      'Content-Type': 'application/json; charset=utf-8',
+    }),
+  };
 };
 
 export default (ctx) => {
-  assert(!ctx.error);
+  assert(!ctx.error, 'Context has error state');
   if (!ctx.response) {
     ctx.error = new Error('`ctx.response` unset');
     ctx.error.statusCode = 503;
@@ -28,6 +47,7 @@ export default (ctx) => {
     headers: ctx.response.headers || {},
     body: ctx.response.body ?? null,
   };
+
   if (ctx.response.body instanceof Readable) {
     if (ctx.response.headers && ctx.response.headers['content-length'] === 0) {
       if (!ctx.response.body.destroyed) {
@@ -55,34 +75,23 @@ export default (ctx) => {
   }
 
   if (Object.hasOwnProperty.call(ctx.response, 'data')) {
-    if (ctx.response.data == null) {
-      response.body = null;
-    } else {
-      response.body = Buffer.from(JSON.stringify(ctx.response.data));
-      response.headers = filterHeaders(
-        response.headers,
-        ['content-encoding', 'content-type'],
-      );
-      response.headers = setHeaders(
-        response.headers,
-        {
-          'Content-Type': 'application/json; charset=utf-8',
-        },
-      );
-    }
+    const jsonResult = handleJsonData(ctx.response.data, response.headers);
+    response.body = jsonResult.body;
+    response.headers = jsonResult.headers;
   }
+
   validateStatusCode(response.statusCode);
+
   if (response.body != null) {
     if (typeof response.body === 'string') {
       response.body = Buffer.from(response.body);
     }
-    assert(Buffer.isBuffer(response.body));
-    if (ctx.request
-      && ctx.request.headers
-      && ctx.request.headers['accept-encoding']
-      && !getHeaderValue(response.headers, 'content-encoding')
-    ) {
-      const acceptEncoding = ctx.request.headers['accept-encoding'];
+
+    assert(Buffer.isBuffer(response.body), 'Response body must be a Buffer');
+
+    const acceptEncoding = ctx.request?.headers?.['accept-encoding'];
+
+    if (acceptEncoding && !getHeaderValue(response.headers, 'content-encoding')) {
       const ret = encodeContentEncoding(
         response.body,
         Array.isArray(acceptEncoding) ? acceptEncoding.join(',') : acceptEncoding,

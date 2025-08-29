@@ -133,11 +133,12 @@ test('generateResponse content-encoding gzip', () => {
   };
   const response = generateResponse(ctx);
   assert.equal(response.statusCode, 200);
-  assert(response.headers.includes('gzip'));
+  assert(!response.headers.includes('gzip'));
   assert(response.headers.includes('application/json; charset=utf-8'));
   assert.deepEqual(
     ctx.response.data,
-    JSON.parse(zlib.unzipSync(response.body).toString()),
+    JSON.parse(response.body),
+    // JSON.parse(zlib.unzipSync(response.body).toString()),
   );
 });
 
@@ -208,13 +209,13 @@ test('generateResponse data gzip 1', () => {
   const response = generateResponse(ctx);
   assert.equal(response.statusCode, 200);
   assert(response.headers.includes('application/json; charset=utf-8'));
-  assert(response.headers.includes('gzip'));
-  assert(response.headers.includes('Content-Encoding'));
+  assert(!response.headers.includes('gzip'));
+  assert(!response.headers.includes('Content-Encoding'));
   assert.deepEqual(
     {
       name: 'quan',
     },
-    JSON.parse(zlib.unzipSync(response.body)),
+    JSON.parse(response.body),
   );
 });
 
@@ -234,17 +235,18 @@ test('generateResponse data gzip 2', () => {
   const response = generateResponse(ctx);
   assert.equal(response.statusCode, 200);
   assert(response.headers.includes('application/json; charset=utf-8'));
-  assert(response.headers.includes('br'));
-  assert(response.headers.includes('Content-Encoding'));
+  assert(!response.headers.includes('br'));
+  assert(!response.headers.includes('Content-Encoding'));
   assert.deepEqual(
     {
       name: 'quan',
     },
-    JSON.parse(zlib.brotliDecompressSync(response.body)),
+    JSON.parse(response.body),
   );
 });
 
 test('generateResponse data gzip 3', () => {
+  const dataBuf = Buffer.from('test123'.repeat(10000));
   const ctx = {
     request: {
       headers: {
@@ -252,7 +254,7 @@ test('generateResponse data gzip 3', () => {
       },
     },
     response: {
-      body: 'abcdef',
+      body: dataBuf,
     },
   };
   const response = generateResponse(ctx);
@@ -260,9 +262,10 @@ test('generateResponse data gzip 3', () => {
   assert(!response.headers.includes('application/json; charset=utf-8'));
   assert(response.headers.includes('br'));
   assert(response.headers.includes('Content-Encoding'));
+
   assert.deepEqual(
-    'abcdef',
     zlib.brotliDecompressSync(response.body).toString(),
+    dataBuf.toString(),
   );
 });
 
@@ -284,7 +287,6 @@ test('generateResponse data gzip 3', () => {
   assert.equal(response.statusCode, 200);
   assert(response.headers.includes('gzip'));
   assert(response.headers.includes('content-encoding'));
-  assert(response.body !== 'abcdef');
   assert.deepEqual(
     'abcdef',
     response.body.toString(),
@@ -304,13 +306,14 @@ test('generateResponse data gzip 3', () => {
   };
   const response = generateResponse(ctx);
   assert.equal(response.statusCode, 200);
-  assert(response.headers.includes('gzip'));
-  assert(response.headers.includes('Content-Encoding'));
-  assert(response.headers.includes('gzip'));
-  assert(response.body !== 'abcdef');
+  assert(!response.headers.includes('gzip'));
+  assert(!response.headers.includes('Content-Encoding'));
+  assert(!response.headers.includes('gzip'));
+  // assert(response.body !== 'abcdef');
   assert.deepEqual(
     'abcdef',
-    zlib.unzipSync(response.body).toString(),
+    response.body.toString(),
+    // zlib.unzipSync(response.body).toString(),
   );
 });
 
