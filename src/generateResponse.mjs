@@ -16,6 +16,24 @@ const validateStatusCode = (statusCode) => {
   assert(Number.isInteger(statusCode) && statusCode >= 0 && statusCode <= 999, `Invalid response statusCode: ${statusCode}`);
 };
 
+const handleStreamBody = (response, stream) => {
+  if (response.headers?.['content-length'] === 0) {
+    if (!stream.destroyed) {
+      stream.destroy();
+    }
+    return null;
+  }
+
+  // 确保流不可读且存在 data 属性
+  assert(!stream.readable, 'Stream should not be readable');
+  assert(
+    Object.prototype.hasOwnProperty.call(response, 'data'),
+    'Response data property is required for streams',
+  );
+
+  return stream;
+};
+
 const handleJsonData = (data, headers) => {
   if (data == null) {
     return {
@@ -88,18 +106,7 @@ export default (ctx) => {
   }
 
   if (ctx.response.body instanceof Readable) {
-    if (ctx.response.headers && ctx.response.headers['content-length'] === 0) {
-      if (!ctx.response.body.destroyed) {
-        ctx.response.body.destroy();
-      }
-      response.body = null;
-    } else {
-      assert(!ctx.response.body.readable, 'Stream should not be readable');
-      assert(
-        Object.hasOwnProperty.call(ctx.response, 'data'),
-        'Response data property is required for streams',
-      );
-    }
+    response.body = handleStreamBody(ctx.response, ctx.response.body);
   }
 
   if (Object.hasOwnProperty.call(ctx.response, 'data')) {
@@ -108,7 +115,7 @@ export default (ctx) => {
     response.headers = jsonResult.headers;
   }
 
-  if (response.body != null) {
+  if (response.body != null && !(response.body instanceof Readable)) {
     if (typeof response.body === 'string') {
       response.body = Buffer.from(response.body);
     }
