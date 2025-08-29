@@ -116,6 +116,17 @@ test('generateResponse', () => {
   assert(Array.isArray(response.headers));
   assert(!response.headers.includes('text/plain'));
   assert(response.headers.includes('text/html'));
+  assert(!response.headers.includes('Content-Encoding'));
+  ctx.response = {
+    body: 'ccc',
+    headers: {
+      'Content-Type': 'text/plain',
+      'Content-Encoding': 'gzip',
+    },
+  };
+  response = generateResponse(ctx);
+  assert(response.headers.includes('Content-Encoding'));
+  assert.equal(response.body, 'ccc');
 });
 
 test('generateResponse content-encoding gzip', () => {
@@ -131,14 +142,21 @@ test('generateResponse content-encoding gzip', () => {
       },
     },
   };
-  const response = generateResponse(ctx);
+  let response = generateResponse(ctx);
   assert.equal(response.statusCode, 200);
   assert(!response.headers.includes('gzip'));
   assert(response.headers.includes('application/json; charset=utf-8'));
   assert.deepEqual(
     ctx.response.data,
     JSON.parse(response.body),
-    // JSON.parse(zlib.unzipSync(response.body).toString()),
+  );
+  ctx.response.data.content = 'aaaa---'.repeat(10000);
+  response = generateResponse(ctx);
+  assert(response.headers.includes('gzip'));
+  assert(response.headers.includes('application/json; charset=utf-8'));
+  assert.deepEqual(
+    ctx.response.data,
+    JSON.parse(zlib.unzipSync(response.body).toString()),
   );
 });
 

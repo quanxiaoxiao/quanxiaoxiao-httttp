@@ -56,6 +56,18 @@ const handleContentEncoding = (body, headers, acceptEncoding) => {
   };
 };
 
+const normalizeHeaders = (ctx) => {
+  let headers = ctx.response.headers || {};
+
+  if (ctx.response._headers) {
+    headers = ctx.response._headers;
+  } else if (ctx.response.headersRaw) {
+    headers = ctx.response.headersRaw;
+  }
+
+  return Array.isArray(headers) ? headers : convertObjectToArray(headers);
+};
+
 export default (ctx) => {
   assert(!ctx.error, 'Context has error state');
   if (!ctx.response) {
@@ -65,7 +77,7 @@ export default (ctx) => {
   }
   const response = {
     statusCode: ctx.response.statusCode ?? 200,
-    headers: ctx.response.headers || {},
+    headers: normalizeHeaders(ctx),
     body: ctx.response.body ?? null,
   };
 
@@ -88,16 +100,6 @@ export default (ctx) => {
         'Response data property is required for streams',
       );
     }
-  }
-
-  if (ctx.response._headers) {
-    response.headers = ctx.response._headers;
-  } else if (ctx.response.headersRaw) {
-    response.headers = ctx.response.headersRaw;
-  }
-
-  if (!Array.isArray(response.headers)) {
-    response.headers = convertObjectToArray(response.headers);
   }
 
   if (Object.hasOwnProperty.call(ctx.response, 'data')) {
