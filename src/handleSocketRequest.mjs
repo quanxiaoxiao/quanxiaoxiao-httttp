@@ -182,23 +182,23 @@ export default ({
 
   function doChunkOutgoning(chunk) {
     const size = chunk.length;
-    if (!controller.signal.aborted && size > 0) {
-      try {
-        const ret = state.connector.write(chunk);
-        timeUpdater.updateOutgoing();
-        state.bytesOutgoing += size;
-        return ret;
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          controller.abort();
-        }
-        if (state.ctx.error == null) {
-          state.ctx.error = error;
-        }
-        return false;
-      }
+    if (controller.signal.aborted || size === 0) {
+      return false;
     }
-    return false;
+    try {
+      const ret = state.connector.write(chunk);
+      timeUpdater.updateOutgoing();
+      state.bytesOutgoing += size;
+      return ret;
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        controller.abort();
+      }
+      if (state.ctx.error == null) {
+        state.ctx.error = error;
+      }
+      return false;
+    }
   }
 
   function doResponseEnd() {
