@@ -41,7 +41,7 @@ import {
   HTTP_STEP_RESPONSE_START,
   HTTP_STEP_RESPONSE_WAIT,
 } from './constants.mjs';
-import generateRequestContext from './generateRequestContext.mjs';
+import createRequestContext from './createRequestContext.mjs';
 import generateResponse from './generateResponse.mjs';
 import isSocketEnable from './isSocketEnable.mjs';
 import promisess from './utils/promisess.mjs';
@@ -547,7 +547,7 @@ export default ({
   function initializeNewRequest() {
     state.currentStep = HTTP_STEP_REQUEST_START;
     state.count += 1;
-    state.ctx = generateRequestContext();
+    state.ctx = createRequestContext();
     Object.assign(state.ctx, {
       socket,
       signal: controller.signal,
