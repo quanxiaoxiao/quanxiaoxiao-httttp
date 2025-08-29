@@ -41,10 +41,40 @@ import {
   HTTP_STEP_RESPONSE_START,
   HTTP_STEP_RESPONSE_WAIT,
 } from './constants.mjs';
-import createRequestContext from './createRequestContext.mjs';
 import generateResponse from './generateResponse.mjs';
 import isSocketEnable from './isSocketEnable.mjs';
-import promisess from './utils/promisess.mjs';
+
+const DEFAULT_TIMEOUT = 60_000;
+
+const promisess = async (fn, ...args) => {
+  const ret = await fn(...args);
+  return ret;
+};
+
+const createRequestContext = () => ({
+  request: {
+    url: null,
+    dateTimeCreate: Date.now(),
+    timeOnStart: performance.now(),
+    timeOnStartLine: null,
+    timeOnHeader: null,
+    timeOnBody: null,
+    timeOnEnd: null,
+    connection: false,
+    method: null,
+    path: null,
+    httpVersion: null,
+    headersRaw: [],
+    headers: {},
+    body: null,
+    pathname: null,
+    querystring: '',
+    query: {},
+    bytesBody: 0,
+  },
+  response: null,
+  error: null,
+});
 
 export default ({
   socket,
@@ -586,7 +616,7 @@ export default ({
 
   state.connector = createConnector(
     {
-      timeout: 1000 * 60,
+      timeout: DEFAULT_TIMEOUT,
       onData: (chunk) => {
         if (chunk.length > 0) {
           updateTimeOnLastIncoming();
