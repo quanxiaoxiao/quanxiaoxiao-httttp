@@ -35,6 +35,27 @@ const handleJsonData = (data, headers) => {
   };
 };
 
+const handleContentEncoding = (body, headers, acceptEncoding) => {
+  if (getHeaderValue(headers, 'content-encoding')) {
+    return { body, headers };
+  }
+
+  const encoding = Array.isArray(acceptEncoding)
+    ? acceptEncoding.join(',')
+    : acceptEncoding;
+
+  const encoded = encodeContentEncoding(body, encoding);
+
+  const updatedHeaders = encoded.name
+    ? setHeaders(headers, { 'Content-Encoding': encoded.name })
+    : headers;
+
+  return {
+    body: encoded.buf,
+    headers: updatedHeaders,
+  };
+};
+
 export default (ctx) => {
   assert(!ctx.error, 'Context has error state');
   if (!ctx.response) {
@@ -48,6 +69,12 @@ export default (ctx) => {
     body: ctx.response.body ?? null,
   };
 
+  validateStatusCode(response.statusCode);
+
+  if (STATUS_CODES[response.statusCode]) {
+    response.statusText = STATUS_CODES[response.statusCode];
+  }
+
   if (ctx.response.body instanceof Readable) {
     if (ctx.response.headers && ctx.response.headers['content-length'] === 0) {
       if (!ctx.response.body.destroyed) {
@@ -55,13 +82,12 @@ export default (ctx) => {
       }
       response.body = null;
     } else {
-      assert(!ctx.response.body.readable);
-      assert(Object.hasOwnProperty.call(ctx.response, 'data'));
+      assert(!ctx.response.body.readable, 'Stream should not be readable');
+      assert(
+        Object.hasOwnProperty.call(ctx.response, 'data'),
+        'Response data property is required for streams',
+      );
     }
-  }
-
-  if (STATUS_CODES[response.statusCode]) {
-    response.statusText = STATUS_CODES[response.statusCode];
   }
 
   if (ctx.response._headers) {
@@ -80,8 +106,6 @@ export default (ctx) => {
     response.headers = jsonResult.headers;
   }
 
-  validateStatusCode(response.statusCode);
-
   if (response.body != null) {
     if (typeof response.body === 'string') {
       response.body = Buffer.from(response.body);
@@ -91,20 +115,14 @@ export default (ctx) => {
 
     const acceptEncoding = ctx.request?.headers?.['accept-encoding'];
 
-    if (acceptEncoding && !getHeaderValue(response.headers, 'content-encoding')) {
-      const ret = encodeContentEncoding(
+    if (acceptEncoding) {
+      const encodingResult = handleContentEncoding(
         response.body,
-        Array.isArray(acceptEncoding) ? acceptEncoding.join(',') : acceptEncoding,
+        response.headers,
+        acceptEncoding,
       );
-      if (ret.name) {
-        response.headers = setHeaders(
-          response.headers,
-          {
-            'Content-Encoding': ret.name,
-          },
-        );
-      }
-      response.body = ret.buf;
+      response.body = encodingResult.body;
+      response.headers = encodingResult.headers;
     }
   }
   return response;
