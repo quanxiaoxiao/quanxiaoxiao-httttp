@@ -91,6 +91,15 @@ const createInitialState = () => ({
   connector: null,
 });
 
+const createTimeUpdater = (state) => ({
+  updateIncoming: () => {
+    state.timeOnLastIncoming = performance.now() - state.timeOnStart;
+  },
+  updateOutgoing: () => {
+    state.timeOnLastOutgoing = performance.now() - state.timeOnStart;
+  },
+});
+
 export default ({
   socket,
   onWebSocket,
@@ -107,16 +116,8 @@ export default ({
     return false;
   }
   const controller = new AbortController();
-
   const state = createInitialState();
-
-  function updateTimeOnLastIncoming() {
-    state.timeOnLastIncoming = performance.now() - state.timeOnStart;
-  }
-
-  function updateTimeOnLastOutgoing() {
-    state.timeOnLastOutgoing = performance.now() - state.timeOnStart;
-  }
+  const timeUpdater = createTimeUpdater(state);
 
   function calcContextTime() {
     assert(state.ctx && state.ctx.request);
@@ -128,7 +129,7 @@ export default ({
     if (!controller.signal.aborted && size > 0) {
       try {
         const ret = state.connector.write(chunk);
-        updateTimeOnLastOutgoing();
+        timeUpdater.updateOutgoing();
         state.bytesOutgoing += size;
         return ret;
       } catch (error) {
@@ -183,7 +184,7 @@ export default ({
         const size = chunk.length;
         try {
           state.connector.end(chunk);
-          updateTimeOnLastOutgoing();
+          timeUpdater.updateOutgoing();
           state.bytesOutgoing += size;
         } catch (error) {
           console.warn(error);
@@ -392,10 +393,10 @@ export default ({
       },
       onChunkOutgoing: (chunk) => {
         state.bytesOutgoing += chunk.length;
-        updateTimeOnLastOutgoing();
+        timeUpdater.updateOutgoing();
       },
       onChunkIncoming: (chunk) => {
-        updateTimeOnLastIncoming();
+        timeUpdater.updateOutgoing();
         state.bytesIncoming += chunk.length;
         ctx.request.bytesBody += chunk.length;
         if (ctx.request.timeOnBody == null) {
@@ -620,44 +621,43 @@ export default ({
     {
       timeout: DEFAULT_TIMEOUT,
       onData: (chunk) => {
-        if (chunk.length > 0) {
-          updateTimeOnLastIncoming();
-          checkRequestChunk(chunk);
-          if (!controller.signal.aborted) {
-            state.execute(chunk)
-              .then(
-                () => {},
-                (error) => {
-                  if (state.ctx.error == null) {
-                    state.ctx.error = error;
-                  }
-                  if (controller.signal.aborted) {
-                    shutdown(state.ctx.error);
-                  } else if (error instanceof DecodeHttpError) {
-                    shutdown(error);
-                  } else {
-                    doResponseError();
-                  }
-                },
-              );
-          }
+        if (chunk.length === 0) {
+          return;
+        }
+        timeUpdater.updateIncoming();
+        checkRequestChunk(chunk);
+        if (!controller.signal.aborted) {
+          state.execute(chunk)
+            .then(
+              () => {},
+              (error) => {
+                if (!state.ctx.error) {
+                  state.ctx.error = error;
+                }
+                if (controller.signal.aborted) {
+                  shutdown(state.ctx.error);
+                } else if (error instanceof DecodeHttpError) {
+                  shutdown(error);
+                } else {
+                  doResponseError();
+                }
+              },
+            );
         }
       },
       onDrain: () => {
-        if (state.ctx
-          && state.ctx.response
-          && state.ctx.response.body instanceof Readable
-          && state.ctx.response.body.isPaused()
-        ) {
+        const responseBody = state.ctx?.response?.body;
+        if (responseBody instanceof Readable && responseBody.isPaused()) {
           state.ctx.response.body.resume();
         }
       },
       onClose: () => {
-        assert(!controller.signal.aborted);
+        assert(!controller.signal.aborted, 'Controller should not be aborted');
         controller.abort();
+
         if (state.currentStep !== HTTP_STEP_RESPONSE_END && state.currentStep !== HTTP_STEP_EMPTY) {
-          assert(state.ctx);
-          const error = new Error('Socket Close Error');
+          assert(state.ctx, 'Context should exist');
+          const error = new Error('Socket closed unexpectedly');
           if (!state.ctx.error) {
             state.ctx.error = error;
           }
