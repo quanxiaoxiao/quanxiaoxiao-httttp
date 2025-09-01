@@ -46,6 +46,16 @@ import isSocketEnable from './isSocketEnable.mjs';
 
 const DEFAULT_TIMEOUT = 60_000;
 
+const safeExecute = async (handler, ...args) => {
+  if (!handler) return;
+  try {
+    await handler(...args);
+  } catch (error) {
+    console.warn('Handler execution error:', error);
+    throw error;
+  }
+};
+
 const createRequestContext = () => ({
   request: {
     url: null,
@@ -98,7 +108,6 @@ const createTimeUpdater = (state) => ({
 const createStateManager = (state, controller) => ({
   isValid: () => !controller.signal.aborted && state.ctx && !state.ctx.error,
   isSocketValid: (socket) => !socket.destroyed && !controller.signal.aborted,
-  canTransitionToStep: (targetStep) => state.currentStep < targetStep,
   setStep: (step) => {
     state.currentStep = step;
   },
@@ -132,16 +141,6 @@ const parseRequestPath = (path) => {
     querystring,
     query,
   };
-};
-
-const safeExecute = async (handler, ...args) => {
-  if (!handler) return;
-  try {
-    await handler(...args);
-  } catch (error) {
-    console.warn('Handler execution error:', error);
-    throw error;
-  }
 };
 
 const hasStreamResponseBody = (ctx) => {
@@ -179,7 +178,7 @@ export default (options) => {
   const timeUpdater = createTimeUpdater(state);
   const stateManager = createStateManager(state, controller);
 
-  function doChunkOutgoning(chunk) {
+  function writeChunk(chunk) {
     const size = chunk.length;
     if (controller.signal.aborted || size === 0) {
       return false;
@@ -202,7 +201,7 @@ export default (options) => {
     stateManager.setError(error);
   }
 
-  function doResponseEnd() {
+  function handleResponseEnd() {
     if (socket.destroyed || controller.signal.aborted || !stateManager.isValid()) {
       return;
     }
@@ -219,7 +218,7 @@ export default (options) => {
     safeExecute(onHttpResponseEnd, ctx).catch(console.warn);
   }
 
-  function doResponseError() {
+  function handleResponseError() {
     const { ctx } = state;
     if (socket.destroyed
       || controller.signal.aborted
@@ -260,15 +259,15 @@ export default (options) => {
       return;
     }
     stateManager.setError(error);
-    doResponseError();
+    handleResponseError();
   }
 
   const handleStaticResponse = (ctx) => {
     try {
       const chunk = encodeHttp(generateResponse(ctx));
       stateManager.setStep(HTTP_STEP_RESPONSE_HEADER_SPEND);
-      doChunkOutgoning(chunk);
-      doResponseEnd();
+      writeChunk(chunk);
+      handleResponseEnd();
     } catch (error) {
       handleHttpError(error, ctx);
     }
@@ -284,7 +283,7 @@ export default (options) => {
       body: ctx.response.body,
       onHeader: (chunk) => {
         stateManager.setStep(HTTP_STEP_RESPONSE_HEADER_SPEND);
-        doChunkOutgoning(chunk);
+        writeChunk(chunk);
       },
     });
     process.nextTick(() => {
@@ -296,13 +295,13 @@ export default (options) => {
         wrapStreamRead({
           signal: controller.signal,
           stream: ctx.response.body,
-          onData: (chunk) => doChunkOutgoning(encodeHttpResponse(chunk)),
+          onData: (chunk) => writeChunk(encodeHttpResponse(chunk)),
           onEnd: () => {
             const chunk = encodeHttpResponse();
             stateManager.setStep(HTTP_STEP_RESPONSE_READ_CONTENT_END);
-            doChunkOutgoning(chunk);
+            writeChunk(chunk);
             if (stateManager.isValid()) {
-              doResponseEnd();
+              handleResponseEnd();
             }
           },
           onError: (error) => {
@@ -326,7 +325,7 @@ export default (options) => {
     });
   };
 
-  function doResponse() {
+  function handleResponse() {
     if (socket.destroyed || controller.signal.aborted) {
       return;
     }
@@ -346,7 +345,7 @@ export default (options) => {
     if (!controller.signal.aborted) {
       controller.abort();
     }
-    doSocketClose(error); // eslint-disable-line no-use-before-define
+    handleSocketClose(error); // eslint-disable-line no-use-before-define
   }
 
   function createRequestBodyHandler() {
@@ -372,7 +371,7 @@ export default (options) => {
       onError: (error) => {
         if (!controller.signal.aborted) {
           stateManager.setError(new Error(`Request body stream error: ${error.message}`));
-          doResponseError();
+          handleResponseError();
         }
       },
     });
@@ -436,10 +435,10 @@ export default (options) => {
         }
       },
       onError: (error) => {
-        doSocketClose(error); // eslint-disable-line no-use-before-define
+        handleSocketClose(error); // eslint-disable-line no-use-before-define
       },
       onClose: () => {
-        doSocketClose(); // eslint-disable-line no-use-before-define
+        handleSocketClose(); // eslint-disable-line no-use-before-define
       },
       onConnect: () => {
         ctx.response.timeOnConnect = calcContextTime(ctx);
@@ -464,7 +463,7 @@ export default (options) => {
     });
   }
 
-  function doHttpRequestComplete() {
+  function handleHttpRequestComplete() {
     const { ctx } = state;
     assert(!controller.signal.aborted, 'Controller should not be aborted');
     assert(!ctx.error, 'No error should exist');
@@ -475,18 +474,19 @@ export default (options) => {
       safeExecute(onHttpResponse, ctx)
         .then(() => {
           if (!controller.signal.aborted) {
-            doResponse(ctx);
+            handleResponse(ctx);
           }
         })
         .catch(handleHttpError);
     } else {
-      doResponse(ctx);
+      handleResponse(ctx);
     }
   }
 
-  function doSocketClose(error) {
+  function handleSocketClose(error) {
     if (onSocketClose && !state.isSocketCloseEmit) {
       state.isSocketCloseEmit = true;
+
       const result = {
         dateTimeCreate: state.dateTimeCreate,
         dateTimeLastIncoming: null,
@@ -584,7 +584,7 @@ export default (options) => {
 
         if (ret.dataBuf.length > 0) {
           stateManager.setError(createError(400));
-          doResponseError();
+          handleResponseError();
           return;
         }
 
@@ -595,9 +595,9 @@ export default (options) => {
 
         if (shouldWaitForConsume) {
           stateManager.setStep(HTTP_STEP_REQUEST_CONTENT_WAIT_CONSUME);
-          ctx.request.end(doHttpRequestComplete);
+          ctx.request.end(handleHttpRequestComplete);
         } else {
-          doHttpRequestComplete();
+          handleHttpRequestComplete();
         }
       },
     });
@@ -665,7 +665,7 @@ export default (options) => {
               } else if (error instanceof DecodeHttpError) {
                 shutdown(error);
               } else {
-                doResponseError();
+                handleResponseError();
               }
             });
         }
@@ -684,13 +684,13 @@ export default (options) => {
           assert(state.ctx, 'Context should exist');
           const error = new Error('Socket closed unexpectedly');
           stateManager.setError(error);
-          doSocketClose(error);
+          handleSocketClose(error);
         } else {
-          doSocketClose();
+          handleSocketClose();
         }
       },
       onFinish: () => {
-        doSocketClose(state.ctx?.error);
+        handleSocketClose(state.ctx?.error);
       },
       onError: (error) => {
         if (!controller.signal.aborted) {
@@ -699,7 +699,7 @@ export default (options) => {
             stateManager.setError(error);
           }
         }
-        doSocketClose(error);
+        handleSocketClose(error);
       },
     },
     () => socket,
