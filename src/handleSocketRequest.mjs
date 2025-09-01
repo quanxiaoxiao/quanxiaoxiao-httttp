@@ -504,17 +504,9 @@ export default (options) => {
         count: state.count,
         step: state.currentStep,
         error,
-        request: null,
-        response: null,
+        request: state.ctx?.request || null,
+        response: state.ctx?.response || null,
       };
-      if (state.ctx) {
-        if (state.ctx.request) {
-          result.request = state.ctx.request;
-        }
-        if (state.ctx.response) {
-          result.response = state.ctx.response;
-        }
-      }
       if (state.timeOnLastIncoming != null) {
         result.dateTimeLastIncoming = result.dateTimeCreate + (state.timeOnLastIncoming - state.timeOnStart);
       }
