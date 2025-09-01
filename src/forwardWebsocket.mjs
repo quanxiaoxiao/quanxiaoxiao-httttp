@@ -8,6 +8,22 @@ import createError from 'http-errors';
 
 import generateRequestForwardOptions from './utils/generateRequestForwardOptions.mjs';
 
+const CONNECT_TIMEOUT = 10_1000;
+const PIPE_TIMEOUT = 50_1000;
+const DEFAULT_PROTOCOL = 'http:';
+
+const establishConnection = async (remoteSocket, signal, onConnect) => {
+  await waitConnect(
+    remoteSocket,
+    CONNECT_TIMEOUT,
+    signal,
+  );
+
+  if (onConnect) {
+    onConnect();
+  }
+};
+
 export default async ({
   options,
   signal,
@@ -25,19 +41,12 @@ export default async ({
   const remoteSocket = getSocketConnect({
     hostname: options.hostname,
     port: options.port,
-    protocol: options.protocol || 'http:',
+    protocol: options.protocol || DEFAULT_PROTOCOL,
   });
   try {
-    await waitConnect(
-      remoteSocket,
-      1000 * 10,
-      signal,
-    );
-    if (options.onConnect) {
-      options.onConnect();
-    }
+    await establishConnection(remoteSocket, signal, onConnect);
   } catch (error) {
-    console.warn(error);
+    console.warn('Failed to establish remote connection:', error.message);
     throw createError(502);
   }
 
@@ -51,7 +60,7 @@ export default async ({
     () => remoteSocket,
     () => clientSocket,
     {
-      timeout: 1000 * 50,
+      timeout: PIPE_TIMEOUT,
       onError,
       onClose,
       onIncoming: (chunk) => {
