@@ -519,7 +519,7 @@ export default (options) => {
     }
   }
 
-  const bindExcute = () => {
+  const bindExecutor = () => {
     const { ctx } = state;
     state.execute = decodeHttpRequest({
       onStartLine: async (ret) => {
@@ -625,6 +625,7 @@ export default (options) => {
       socket,
       signal: controller.signal,
     });
+
     if (onHttpRequest) {
       onHttpRequest({
         dateTimeCreate: state.dateTimeCreate,
@@ -635,10 +636,10 @@ export default (options) => {
         ctx: state.ctx,
       });
       if (state.ctx.ws) {
-        assert(state.ctx.ws instanceof Writable && state.ctx.ws.writable);
+        assert(state.ctx.ws instanceof Writable && state.ctx.ws.writable, 'WebSocket should be writable');
       }
     }
-    bindExcute();
+    bindExecutor();
   }
 
   function processChunk(chunk) {
@@ -650,8 +651,7 @@ export default (options) => {
       handleHttpError(createError(400));
       return;
     }
-    const shouldInitialize = state.currentStep === HTTP_STEP_EMPTY ||
-    state.currentStep === HTTP_STEP_RESPONSE_END;
+    const shouldInitialize = state.currentStep === HTTP_STEP_EMPTY || state.currentStep === HTTP_STEP_RESPONSE_END;
     if (shouldInitialize) {
       assert(!state.execute, 'Execute should be null');
       if (state.currentStep === HTTP_STEP_EMPTY) {
