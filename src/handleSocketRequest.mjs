@@ -275,7 +275,8 @@ export default (options) => {
   };
 
   const handleStreamResponse = (ctx) => {
-    assert(!Object.hasOwnProperty.call(ctx.response, 'data'), 'Response should not have data property');
+    assert(!Object.hasOwnProperty.call(ctx.response, 'data'),
+      'Response should not have data property');
 
     const encodeHttpResponse = encodeHttp({
       statusCode: ctx.response.statusCode,
@@ -287,11 +288,11 @@ export default (options) => {
       },
     });
     process.nextTick(() => {
-      const isReadableAndReady = !controller.signal.aborted
+      const isReadyForStreaming = !controller.signal.aborted
           && ctx.response.body.readable
           && state.currentStep === HTTP_STEP_RESPONSE_HEADER_SPEND;
-      if (isReadableAndReady) {
-        state.currentStep = HTTP_STEP_RESPONSE_READ_CONTENT_CHUNK;
+      if (isReadyForStreaming) {
+        stateManager.setStep(HTTP_STEP_RESPONSE_READ_CONTENT_CHUNK);
         wrapStreamRead({
           signal: controller.signal,
           stream: ctx.response.body,
@@ -300,16 +301,14 @@ export default (options) => {
             const chunk = encodeHttpResponse();
             stateManager.setStep(HTTP_STEP_RESPONSE_READ_CONTENT_END);
             doChunkOutgoning(chunk);
-            if (!state.ctx.error) {
+            if (stateManager.isValid()) {
               doResponseEnd();
             }
           },
           onError: (error) => {
-            if (!state.ctx.error) {
-              state.ctx.error = error;
-            }
+            stateManager.setError(error);
             if (!controller.signal.aborted) {
-              console.warn(`response.body stream error \`${error.message}\``);
+              console.warn(`Response body stream error: ${error.message}`);
               state.connector();
               controller.abort();
             }
@@ -381,16 +380,16 @@ export default (options) => {
     ctx.request.end = (data) => {
       if (data == null) {
         ctx.request._write();
+        return;
+      }
+      const type = typeof data;
+      if (type === 'string' || Buffer.isBuffer(data)) {
+        ctx.request._write(type === 'string' ? Buffer.from(data, 'utf8') : data);
+        ctx.request._write();
+      } else if (type === 'function') {
+        ctx.request._write(data);
       } else {
-        const type = typeof data;
-        if (type === 'string' || Buffer.isBuffer(data)) {
-          ctx.request._write(type === 'string' ? Buffer.from(data, 'utf8') : data);
-          ctx.request._write();
-        } else if (type === 'function') {
-          ctx.request._write(data);
-        } else {
-          ctx.request._write();
-        }
+        ctx.request._write();
       }
     };
   }
