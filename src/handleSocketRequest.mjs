@@ -139,7 +139,7 @@ const parseRequestPath = (path) => {
   };
 };
 
-const safeExecuteHandler = (handler) => async (...args) => {
+const safeExecute = async (handler, ...args) => {
   if (!handler) return;
   try {
     await handler(...args);
@@ -150,35 +150,39 @@ const safeExecuteHandler = (handler) => async (...args) => {
 };
 
 const hasStreamResponseBody = (ctx) => {
-  const contentLength = ctx.response?.headers
+  if (!ctx.response?.body || !(ctx.response.body instanceof Readable)) {
+    return false;
+  }
+
+  const contentLength = ctx.response.headers
     ? getHeaderValue(ctx.response.headers, 'content-length')
     : null;
-  return ctx.response?.body instanceof Readable &&
-    ctx.response.body.readable &&
-    contentLength !== 0;
+
+  return ctx.response.body.readable && contentLength !== 0;
 };
 
-export default ({
-  socket,
-  onWebSocket,
-  onHttpRequest,
-  onHttpRequestStartLine,
-  onHttpRequestHeader,
-  onHttpRequestEnd,
-  onHttpResponse,
-  onHttpResponseEnd,
-  onHttpError,
-  onSocketClose,
-}) => {
+export default (options) => {
+  const {
+    socket,
+    onWebSocket,
+    onHttpRequest,
+    onHttpRequestStartLine,
+    onHttpRequestHeader,
+    onHttpRequestEnd,
+    onHttpResponse,
+    onHttpResponseEnd,
+    onHttpError,
+    onSocketClose,
+  } = options;
+
   if (!isSocketEnable(socket)) {
     return false;
   }
+
   const controller = new AbortController();
   const state = createInitialState();
   const timeUpdater = createTimeUpdater(state);
   const stateManager = createStateManager(state, controller);
-
-  state.stateManager = stateManager;
 
   function doChunkOutgoning(chunk) {
     const size = chunk.length;
@@ -191,36 +195,33 @@ export default ({
       state.bytesOutgoing += size;
       return ret;
     } catch (error) {
-      if (!controller.signal.aborted) {
-        controller.abort();
-      }
-      if (state.ctx.error == null) {
-        state.ctx.error = error;
-      }
+      handleConnectorError(error); // eslint-disable-line no-use-before-define
       return false;
     }
   }
 
-  function doResponseEnd() {
-    if (!socket.destroyed) {
-      assert(state.ctx != null);
-      assert(state.currentStep < HTTP_STEP_RESPONSE_END);
-      assert(state.ctx.response);
-      assert(state.ctx.request);
-      assert(!state.ctx.error);
-      if (!controller.signal.aborted) {
-        state.currentStep = HTTP_STEP_RESPONSE_END;
-        state.ctx.response.timeOnEnd = calcContextTime(state.ctx);
-        state.execute = null;
-        if (onHttpResponseEnd) {
-          try {
-            onHttpResponseEnd(state.ctx);
-          } catch (error) {
-            console.warn(error);
-          }
-        }
-      }
+  function handleConnectorError(error) {
+    if (!controller.signal.aborted) {
+      controller.abort();
     }
+    stateManager.setError(error);
+  }
+
+  function doResponseEnd() {
+    if (socket.destroyed || controller.signal.aborted || !stateManager.isValid()) {
+      return;
+    }
+
+    const { ctx } = state;
+    assert(state.currentStep < HTTP_STEP_RESPONSE_END);
+    assert(ctx.response && ctx.request);
+    assert(!state.ctx.error);
+    assert(state.currentStep < HTTP_STEP_RESPONSE_END);
+
+    stateManager.setStep(HTTP_STEP_RESPONSE_END);
+    ctx.response.timeOnEnd = calcContextTime(state.ctx);
+    state.execute = null;
+    safeExecute(onHttpResponseEnd, ctx).catch(console.warn);
   }
 
   function doResponseError() {
@@ -537,7 +538,7 @@ export default ({
           url: ret.path,
           ...parseRequestPath(ret.path),
         });
-        await safeExecuteHandler(onHttpRequestStartLine)(ctx);
+        await safeExecute(onHttpRequestStartLine, ctx);
         assert(!ctx.response, 'Response should not exist yet');
         assert(!socket.destroyed);
         assert(!controller.signal.aborted, 'Controller should not be aborted');
@@ -550,7 +551,7 @@ export default ({
           headers: ret.headers,
           timeOnHeader: calcContextTime(ctx),
         });
-        await safeExecuteHandler(onHttpRequestHeader)(ctx);
+        await safeExecute(onHttpRequestHeader, ctx);
         assert(!controller.signal.aborted, 'Controller should not be aborted');
         assert(!socket.destroyed);
 
@@ -594,7 +595,7 @@ export default ({
         ctx.request.timeOnEnd = calcContextTime(ctx);
         ctx.request.timeOnBody ??= ctx.request.timeOnEnd;
 
-        await safeExecuteHandler(onHttpRequestEnd)(ctx);
+        await safeExecute(onHttpRequestEnd, ctx);
         assert(!socket.destroyed);
 
         if (controller.signal.aborted || ctx.error) {
