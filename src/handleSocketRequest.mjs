@@ -393,35 +393,39 @@ export default (options) => {
     };
   }
 
-  function doUpgradeWebSocket() {
+  const createWebSocketResponse = () => ({
+    headers: {},
+    headersRaw: [],
+    statusCode: null,
+    httpVersion: null,
+    statusText: null,
+    timeOnConnect: null,
+    timeOnStartLine: null,
+    timeOnBody: null,
+    timeOnHeader: null,
+    bytesBody: 0,
+  });
+
+  function handleWebSocketUpgrade() {
     if (!onWebSocket) {
       throw createError(501);
     }
     const { ctx } = state;
     ctx.request.connection = true;
-    state.currentStep = HTTP_STEP_REQUEST_WEBSOCKET_CONNECTION;
+    stateManager.setStep(HTTP_STEP_REQUEST_WEBSOCKET_CONNECTION);
     state.execute = null;
     state.connector.pause();
     ctx.request.bytesBody = 0;
-    ctx.response = {
-      headers: {},
-      headersRaw: [],
-      statusCode: null,
-      httpVersion: null,
-      statusText: null,
-      timeOnConnect: null,
-      timeOnStartLine: null,
-      timeOnBody: null,
-      timeOnHeader: null,
-      bytesBody: 0,
-    };
+    ctx.response = createWebSocketResponse();
     onWebSocket({
       ctx,
       onHttpResponseStartLine: (ret) => {
         ctx.response.timeOnStartLine = calcContextTime(ctx);;
-        ctx.response.statusCode = ret.statusCode;
-        ctx.response.statusText = ret.statusText;
-        ctx.response.httpVersion = ret.httpVersion;
+        Object.assert(ctx.response, {
+          statusCode: ret.statusCode,
+          statusText: ret.statusText,
+          httpVersion: ret.httpVersion,
+        });
       },
       onHttpResponseHeader: (ret) => {
         ctx.response.timeOnHeader = calcContextTime(ctx);;
@@ -430,9 +434,7 @@ export default (options) => {
       },
       onHttpResponseBody: (chunk) => {
         ctx.response.bytesBody += chunk.length;
-        if (ctx.response.timeOnBody == null) {
-          ctx.response.timeOnBody = calcContextTime(ctx);
-        }
+        ctx.response.timeOnBody ??= calcContextTime(ctx);
       },
       onError: (error) => {
         handleSocketClose(error); // eslint-disable-line no-use-before-define
@@ -443,9 +445,10 @@ export default (options) => {
       onConnect: () => {
         ctx.response.timeOnConnect = calcContextTime(ctx);
         process.nextTick(() => {
-          if (!controller.signal.aborted) {
-            state.connector.detach();
-          }
+          if (!state.stateManager.isValid()) {
+            return;
+          };
+          state.connector.detach();
         });
       },
       onChunkOutgoing: (chunk) => {
@@ -456,9 +459,7 @@ export default (options) => {
         timeUpdater.updateOutgoing();
         state.bytesIncoming += chunk.length;
         ctx.request.bytesBody += chunk.length;
-        if (ctx.request.timeOnBody == null) {
-          ctx.response.timeOnBody = calcContextTime(ctx);
-        }
+        ctx.response.timeOnBody ??= calcContextTime(ctx);
       },
     });
   }
@@ -539,7 +540,7 @@ export default (options) => {
           'Invalid state after header processing');
 
         if (isHttpWebSocketUpgrade(ctx.request)) {
-          doUpgradeWebSocket();
+          handleWebSocketUpgrade();
         } else if (hasHttpBodyContent(ctx.request.headers)) {
           createRequestBodyHandler();
         } else if (ctx.request.body instanceof Writable && !ctx.request.body.destroyed) {
