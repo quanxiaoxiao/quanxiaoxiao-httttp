@@ -445,7 +445,7 @@ export default (options) => {
       onConnect: () => {
         ctx.response.timeOnConnect = calcContextTime(ctx);
         process.nextTick(() => {
-          if (!state.stateManager.isValid()) {
+          if (!stateManager.isValid()) {
             return;
           };
           state.connector.detach();
