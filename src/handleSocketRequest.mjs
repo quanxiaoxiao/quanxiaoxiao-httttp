@@ -226,44 +226,46 @@ export default (options) => {
 
   function doResponseError() {
     const { ctx } = state;
-    if (!socket.destroyed && !controller.signal.aborted && state.currentStep !== HTTP_STEP_RESPONSE_END) {
-      if (state.currentStep >= HTTP_STEP_RESPONSE_HEADER_SPEND) {
-        shutdown(ctx.error); // eslint-disable-line no-use-before-define
-      } else if (state.currentStep !== HTTP_STEP_RESPONSE_ERROR) {
-        state.currentStep = HTTP_STEP_RESPONSE_ERROR;
-        attachResponseError(ctx);
-        if (onHttpError) {
-          onHttpError(ctx);
-        } else {
-          console.warn(ctx.error);
-        }
-        const chunk = encodeHttp(ctx.error.response);
-        const size = chunk.length;
-        try {
-          state.connector.end(chunk);
-          timeUpdater.updateOutgoing();
-          state.bytesOutgoing += size;
-        } catch (error) {
-          console.warn(error);
-        } finally {
-          if (!controller.signal.aborted) {
-            controller.abort();
-          }
-        }
-      }
-    } else {
+    if (socket.destroyed
+      || controller.signal.aborted
+      || state.currentStep === HTTP_STEP_RESPONSE_END
+      || state.currentStep >= HTTP_STEP_RESPONSE_HEADER_SPEND
+    ) {
       shutdown(ctx.error); // eslint-disable-line no-use-before-define
+      return;
+    }
+    if (state.currentStep === HTTP_STEP_RESPONSE_ERROR) {
+      return;
+    }
+    state.currentStep = HTTP_STEP_RESPONSE_ERROR;
+    attachResponseError(ctx);
+    if (onHttpError) {
+      onHttpError(ctx);
+    } else {
+      console.warn(ctx.error);
+    }
+    const chunk = encodeHttp(ctx.error.response);
+    const size = chunk.length;
+    try {
+      state.connector.end(chunk);
+      timeUpdater.updateOutgoing();
+      state.bytesOutgoing += size;
+    } catch (error) {
+      console.warn(error);
+    } finally {
+      if (!controller.signal.aborted) {
+        controller.abort();
+      }
     }
   }
 
   function handleHttpError(error) {
     assert(error instanceof Error);
-    if (!controller.signal.aborted) {
-      if (state.ctx.error == null) {
-        state.ctx.error = error;
-      }
-      doResponseError();
+    if (controller.signal.aborted) {
+      return;
     }
+    stateManager.setError(error);
+    doResponseError();
   }
 
   const handleStaticResponse = (ctx) => {
@@ -670,27 +672,22 @@ export default (options) => {
         processChunk(chunk);
         if (!controller.signal.aborted) {
           state.execute(chunk)
-            .then(
-              () => {},
-              (error) => {
-                if (!state.ctx.error) {
-                  state.ctx.error = error;
-                }
-                if (controller.signal.aborted) {
-                  shutdown(state.ctx.error);
-                } else if (error instanceof DecodeHttpError) {
-                  shutdown(error);
-                } else {
-                  doResponseError();
-                }
-              },
-            );
+            .catch((error) => {
+              stateManager.setError(error);
+              if (controller.signal.aborted) {
+                shutdown(state.ctx.error);
+              } else if (error instanceof DecodeHttpError) {
+                shutdown(error);
+              } else {
+                doResponseError();
+              }
+            });
         }
       },
       onDrain: () => {
         const responseBody = state.ctx?.response?.body;
         if (responseBody instanceof Readable && responseBody.isPaused()) {
-          state.ctx.response.body.resume();
+          responseBody.resume();
         }
       },
       onClose: () => {
@@ -700,9 +697,7 @@ export default (options) => {
         if (state.currentStep !== HTTP_STEP_RESPONSE_END && state.currentStep !== HTTP_STEP_EMPTY) {
           assert(state.ctx, 'Context should exist');
           const error = new Error('Socket closed unexpectedly');
-          if (!state.ctx.error) {
-            state.ctx.error = error;
-          }
+          stateManager.setError(error);
           doSocketClose(error);
         } else {
           doSocketClose();
@@ -714,8 +709,8 @@ export default (options) => {
       onError: (error) => {
         if (!controller.signal.aborted) {
           controller.abort();
-          if (state.ctx && !state.ctx.error) {
-            state.ctx.error = error;
+          if (state.ctx) {
+            stateManager.setError(error);
           }
         }
         doSocketClose(error);
