@@ -46,11 +46,6 @@ import isSocketEnable from './isSocketEnable.mjs';
 
 const DEFAULT_TIMEOUT = 60_000;
 
-const promisess = async (fn, ...args) => {
-  const ret = await fn(...args);
-  return ret;
-};
-
 const createRequestContext = () => ({
   request: {
     url: null,
@@ -377,9 +372,7 @@ export default (options) => {
       },
       onError: (error) => {
         if (!controller.signal.aborted) {
-          if (!ctx.error) {
-            ctx.error = new Error(`Request body stream error: ${error.message}`);
-          }
+          stateManager.setError(new Error(`Request body stream error: ${error.message}`));
           doResponseError();
         }
       },
@@ -480,15 +473,13 @@ export default (options) => {
     stateManager.setStep(HTTP_STEP_REQUEST_COMPLETE);
     if (onHttpResponse) {
       stateManager.setStep(HTTP_STEP_RESPONSE_WAIT);
-      promisess(onHttpResponse, ctx)
-        .then(
-          () => {
-            if (!controller.signal.aborted) {
-              doResponse(ctx);
-            }
-          },
-          handleHttpError,
-        );
+      safeExecute(onHttpResponse, ctx)
+        .then(() => {
+          if (!controller.signal.aborted) {
+            doResponse(ctx);
+          }
+        })
+        .catch(handleHttpError);
     } else {
       doResponse(ctx);
     }
