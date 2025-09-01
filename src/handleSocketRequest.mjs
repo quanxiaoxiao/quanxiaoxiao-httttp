@@ -533,9 +533,8 @@ export default (options) => {
           ...parseRequestPath(ret.path),
         });
         await safeExecute(onHttpRequestStartLine, ctx);
-        assert(!ctx.response, 'Response should not exist yet');
-        assert(!socket.destroyed);
-        assert(!controller.signal.aborted, 'Controller should not be aborted');
+        assert(!ctx.response && !socket.destroyed && !controller.signal.aborted,
+          'Invalid state after start line processing');
       },
       onHeader: async (ret) => {
         assert(state.currentStep === HTTP_STEP_REQUEST_START_LINE, 'Invalid step');
@@ -546,24 +545,21 @@ export default (options) => {
           timeOnHeader: calcContextTime(ctx),
         });
         await safeExecute(onHttpRequestHeader, ctx);
-        assert(!controller.signal.aborted, 'Controller should not be aborted');
-        assert(!socket.destroyed);
+        assert(!controller.signal.aborted && !socket.destroyed,
+          'Invalid state after header processing');
 
         if (isHttpWebSocketUpgrade(ctx.request)) {
           doUpgradeWebSocket();
         } else if (hasHttpBodyContent(ctx.request.headers)) {
           createRequestBodyHandler();
-        } else if (ctx.request.body != null) {
-          if (ctx.request.body instanceof Writable && !ctx.request.body.destroyed) {
-            ctx.request.body.destroy();
-          }
+        } else if (ctx.request.body instanceof Writable && !ctx.request.body.destroyed) {
+          ctx.request.body.destroy();
           ctx.request.body = null;
         }
       },
       onBody: (chunk) => {
-        assert(!socket.destroyed);
-        assert(!controller.signal.aborted, 'Controller should not be aborted');
-        assert(!ctx.request.connection, 'Should not be WebSocket connection');
+        assert(!socket.destroyed && !controller.signal.aborted && !ctx.request.connection,
+          'Invalid state for body processing');
         if (ctx.request.timeOnBody == null) {
           ctx.request.timeOnBody = calcContextTime(ctx);
           if (state.currentStep < HTTP_STEP_REQUEST_BODY) {
@@ -590,14 +586,14 @@ export default (options) => {
         ctx.request.timeOnBody ??= ctx.request.timeOnEnd;
 
         await safeExecute(onHttpRequestEnd, ctx);
-        assert(!socket.destroyed);
+        assert(!socket.destroyed, 'Socket should not be destroyed');
 
         if (controller.signal.aborted || ctx.error) {
           return;
         }
 
         if (ret.dataBuf.length > 0) {
-          ctx.error = createError(400);
+          stateManager.setError(createError(400));
           doResponseError();
           return;
         }
