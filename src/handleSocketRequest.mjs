@@ -48,12 +48,7 @@ const DEFAULT_TIMEOUT = 60_000;
 
 const safeExecute = async (handler, ...args) => {
   if (!handler) return;
-  try {
-    await handler(...args);
-  } catch (error) {
-    console.warn('Handler execution error:', error);
-    throw error;
-  }
+  await handler(...args);
 };
 
 const createRequestContext = () => ({
