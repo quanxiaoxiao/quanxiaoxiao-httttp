@@ -406,7 +406,7 @@ export default (options) => {
     bytesBody: 0,
   });
 
-  function handleWebSocketUpgrade() {
+  async function handleWebSocketUpgrade() {
     if (!onWebSocket) {
       throw createError(501);
     }
@@ -417,7 +417,7 @@ export default (options) => {
     state.connector.pause();
     ctx.request.bytesBody = 0;
     ctx.response = createWebSocketResponse();
-    onWebSocket({
+    await onWebSocket({
       ctx,
       onHttpResponseStartLine: (ret) => {
         ctx.response.timeOnStartLine = calcContextTime(ctx);;
@@ -540,10 +540,14 @@ export default (options) => {
           'Invalid state after header processing');
 
         if (isHttpWebSocketUpgrade(ctx.request)) {
-          handleWebSocketUpgrade();
-        } else if (hasHttpBodyContent(ctx.request.headers)) {
+          await handleWebSocketUpgrade();
+          return;
+        }
+        if (hasHttpBodyContent(ctx.request.headers)) {
           createRequestBodyHandler();
-        } else if (ctx.request.body instanceof Writable && !ctx.request.body.destroyed) {
+          return;
+        }
+        if (ctx.request.body instanceof Writable && !ctx.request.body.destroyed) {
           ctx.request.body.destroy();
           ctx.request.body = null;
         }
