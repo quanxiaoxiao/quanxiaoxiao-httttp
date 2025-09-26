@@ -22,12 +22,16 @@ export default ({
   list: routeMatchList,
   onCors,
   onRequest,
+  onRouteUnmatch,
   onResponse,
   logger,
 }) => ({
   onHttpRequestStartLine: (ctx) => {
     const routeMatched = routeMatchList.find((routeItem) => routeItem.urlMatch(ctx.request.pathname));
     if (!routeMatched) {
+      if (onRouteUnmatch) {
+        onRouteUnmatch(ctx);
+      }
       throw createError(404);
     }
     ctx.routeMatched = routeMatched;
@@ -220,14 +224,6 @@ export default ({
       if (ctx.error.response.statusCode >= 500 && ctx.error.response.statusCode <= 599) {
         console.error(ctx.error);
       }
-    }
-  },
-  onSocketClose: (data, ctx) => {
-    if (ctx
-      && ctx.forward
-      && ctx.forward.onClose
-    ) {
-      ctx.forward.onClose(ctx);
     }
   },
 });

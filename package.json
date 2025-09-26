@@ -25,8 +25,8 @@
   "dependencies": {
     "@quanxiaoxiao/compare": "^0.3.0",
     "@quanxiaoxiao/datav": "^0.4.0",
-    "@quanxiaoxiao/http-request": "^0.72.0",
-    "@quanxiaoxiao/http-utils": "^0.42.0",
+    "@quanxiaoxiao/http-request": "^0.73.0",
+    "@quanxiaoxiao/http-utils": "^0.43.0",
     "@quanxiaoxiao/node-utils": "^0.16.0",
     "@quanxiaoxiao/socket": "^0.27.0",
     "ajv": "^8.16.0",
