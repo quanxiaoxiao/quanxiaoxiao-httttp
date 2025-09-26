@@ -20,11 +20,11 @@ import attachRequestForward from './attachRequestForward.mjs';
 
 export default ({
   list: routeMatchList,
-  onCors,
   onRequest,
   onRouteUnmatch,
+  onCors,
   onResponse,
-  logger,
+  onHttpError,
 }) => ({
   onHttpRequestStartLine: (ctx) => {
     const routeMatched = routeMatchList.find((routeItem) => routeItem.urlMatch(ctx.request.pathname));
@@ -205,25 +205,20 @@ export default ({
     }
   },
   onHttpResponseEnd: (ctx) => {
-    if (ctx.request.method !== 'OPTIONS' && ctx.routeMatched && ctx.routeMatched.onPost) {
-      ctx.routeMatched.onPost(ctx);
+    if (ctx.request.method === 'OPTIONS') {
+      return;
     }
+    ctx.routeMatched?.onPost(ctx);
   },
   onHttpError: (ctx) => {
     assert(ctx.error && ctx.error.response);
-    let message = ctx.error.message;
-    if (ctx.request.method) {
-      message = `${ctx.request.method} ${ctx.request.path} ${ctx.error.response.statusCode} \`${ctx.error.message}\``;
+    if (ctx.error.code === 'ABORT_ERR') {
+      return;
     }
-    if (ctx.error.code !== 'ABORT_ERR') {
-      if (logger && logger.warn) {
-        logger.warn(message);
-      } else {
-        console.warn(message);
-      }
-      if (ctx.error.response.statusCode >= 500 && ctx.error.response.statusCode <= 599) {
-        console.error(ctx.error);
-      }
+    if (onHttpError) {
+      onHttpError(ctx.error, ctx);
+      return;
     }
+    console.error(ctx.error);
   },
 });
