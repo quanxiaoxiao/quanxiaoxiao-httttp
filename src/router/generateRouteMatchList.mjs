@@ -9,73 +9,105 @@ import { match } from 'path-to-regexp';
 const HTTP_METHODS = ['get', 'post', 'put', 'delete'];
 const PATHNAME_REGEX = /^{\/[^}]+}/;
 
+const isValidPathname = (pathname) => {
+  return pathname[0] === '/' || PATHNAME_REGEX.test(pathname);
+};
+
+const createQuerySelector = (queryConfig) => {
+  if (_.isEmpty(queryConfig)) {
+    return null;
+  }
+
+  return select({
+    type: 'object',
+    properties: queryConfig,
+  });
+};
+
+const processHttpHandler = (method, handlerConfig, routeItem) => {
+  if (!handlerConfig) {
+    return;
+  }
+
+  const httpMethod = method.toUpperCase();
+
+  const handler = typeof handlerConfig === 'function'
+    ? { fn: handlerConfig }
+    : handlerConfig;
+
+  assert(_.isPlainObject(handler), `Handler for ${httpMethod} must be an object`);
+  assert(typeof handler.fn === 'function', `Handler for ${httpMethod} must have a function`);
+
+  const methodHandler = {
+    fn: handler.fn,
+    validate: handler.validate ? (new Ajv()).compile(handler.validate) : null,
+  };
+
+  const querySelector = createQuerySelector(handler.query);
+  if (querySelector) {
+    methodHandler.query = querySelector;
+  }
+
+  if (handler.match) {
+    methodHandler.match = compare(handler.match);
+  }
+
+  routeItem[httpMethod] = methodHandler;
+};
+
+const processRouteConfig = (pathname, routeConfig) => {
+  if (!isValidPathname(pathname)) {
+    throw new Error(`Invalid pathname format: ${pathname}`);
+  }
+
+  const routeItem = {
+    pathname,
+    urlMatch: match(pathname, { encode: false, decode: false }),
+    meta: routeConfig,
+  };
+
+  if (routeConfig.select) {
+    routeItem.select = select(routeConfig.select);
+  }
+
+  if (routeConfig.match) {
+    routeItem.match = compare(routeConfig.match);
+  }
+
+  const globalQuerySelector = createQuerySelector(routeConfig.query);
+
+  if (globalQuerySelector) {
+    routeItem.query = globalQuerySelector;
+  }
+
+  if (routeConfig.onPre && typeof routeConfig.onPre === 'function') {
+    routeItem.onPre = routeConfig.onPre;
+  }
+
+  if (routeConfig.onPost && typeof routeConfig.onPost === 'function') {
+    routeItem.onPost = routeConfig.onPost;
+  }
+
+  for (const method of HTTP_METHODS) {
+    processHttpHandler(method, routeConfig[method], routeItem);
+  }
+
+  return routeItem;
+};
+
 export default (routes) => {
-  assert(_.isPlainObject(routes));
-  return Object.entries(routes).reduce((result, [pathname, routeConfig]) => {
-    if (pathname[0] !== '/' && !PATHNAME_REGEX.test(pathname)) {
-      console.warn(`\`${pathname}\` pathname invalid`);
-      return result;
-    }
+  assert(_.isPlainObject(routes), 'Routes must be a plain object');
+
+  const result = [];
+
+  for (const [pathname, routeConfig] of Object.entries(routes)) {
     try {
-      const routeItem = {
-        pathname,
-        urlMatch: match(pathname, { encode: false, decode: false }),
-        meta: routeConfig,
-      };
-      if (routeConfig.select) {
-        routeItem.select = select(routeConfig.select);
-      }
-      if (routeConfig.match) {
-        routeItem.match = compare(routeConfig.match);
-      }
-      if (!_.isEmpty(routeConfig.query)) {
-        routeItem.query = select({
-          type: 'object',
-          properties: routeConfig.query,
-        });
-      }
-      if (routeConfig.onPre) {
-        routeItem.onPre = routeConfig.onPre;
-      }
-
-      if (routeConfig.onPost) {
-        routeItem.onPost = routeConfig.onPost;
-      }
-
-      for (const method of HTTP_METHODS) {
-        const handlerConfig = routeConfig[method];
-        if (!handlerConfig) {
-          continue;
-        }
-        const httpMethod = method.toUpperCase();
-        const handler = typeof handlerConfig === 'function'
-          ? { fn: handlerConfig }
-          : handlerConfig;
-        assert(_.isPlainObject(handler), 'Handler must be an object');
-        assert(typeof handler.fn === 'function', 'Handler must have a function');
-
-        routeItem[httpMethod] = {
-          fn: handler.fn,
-          validate: handler.validate ? (new Ajv()).compile(handler.validate) : null,
-        };
-
-        if (!_.isEmpty(handler.query)) {
-          routeItem[httpMethod].query = select({
-            type: 'object',
-            properties: handler.query,
-          });
-        }
-        if (handler.match) {
-          routeItem[httpMethod].match = compare(handler.match);
-        }
-      }
-      return [
-        ...result,
-        routeItem,
-      ];
+      const routeItem = processRouteConfig(pathname, routeConfig);
+      result.push(routeItem);
     } catch (error) {
-      console.warn(`\`${pathname}\` parse route fail, ${error.message}`);
-      return result;
+      console.warn(`Route parsing failed for '${pathname}': ${error.message}`);
     }
-  }, []);
+  }
+
+  return result;
 };
