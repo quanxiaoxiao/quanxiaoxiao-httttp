@@ -233,7 +233,7 @@ export default ({
     if (ctx.request.method === 'OPTIONS') {
       return;
     }
-    ctx.routeMatched?.onPost(ctx);
+    ctx.routeMatched?.onPost?.(ctx);
   },
   onHttpError: (ctx) => {
     assert(ctx.error && ctx.error.response);
