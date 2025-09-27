@@ -241,7 +241,7 @@ export default ({
       return;
     }
     if (onHttpError) {
-      onHttpError(ctx.error, ctx);
+      onHttpError(ctx);
       return;
     }
     console.error(ctx.error);
