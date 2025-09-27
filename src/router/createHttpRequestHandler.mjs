@@ -18,6 +18,45 @@ import forwardWebsocket from '../forwardWebsocket.mjs';
 import readStream from '../readStream.mjs';
 import attachRequestForward from './attachRequestForward.mjs';
 
+const validateContextState = (ctx) => {
+  assert(!ctx.signal.aborted);
+  assert(!ctx.socket.destroyed);
+};
+
+const processResponseSelection = async (ctx) => {
+  if (ctx.request.method === 'OPTIONS' || !ctx.routeMatched?.select) {
+    return;
+  }
+
+  if (Object.hasOwnProperty.call(ctx.response, 'data')) {
+    ctx.response.data = ctx.routeMatched.select(ctx.response.data);
+    return;
+  }
+
+  if (!(ctx.response.body instanceof Readable)
+    || !ctx.response.body.readable
+  ) {
+    return;
+  }
+  if (!ctx.response.headers) {
+    return;
+  }
+  const contentLengthWithResponse = getHeaderValue(ctx.response.headers, 'content-length');
+  const contentTypeWithResponse = getHeaderValue(ctx.response.headers, 'content-type');
+  if (contentLengthWithResponse === 0) {
+    ctx.response.body = null;
+    ctx.response.data = null;
+    return;
+  }
+  if (contentTypeWithResponse && /application\/json/i.test(contentTypeWithResponse) && !ctx.signal.aborted) {
+    const buf = await readStream(ctx.response.body, ctx.signal);
+    if (!ctx.socket.destroyed) {
+      ctx.response.body = buf;
+      ctx.response.data = ctx.routeMatched.select(decodeContentToJSON(buf, ctx.response.headers));
+    }
+  }
+};
+
 export default ({
   list: routeMatchList,
   onRequest,
@@ -29,9 +68,7 @@ export default ({
   onHttpRequestStartLine: (ctx) => {
     const routeMatched = routeMatchList.find((routeItem) => routeItem.urlMatch(ctx.request.pathname));
     if (!routeMatched) {
-      if (onRouteUnmatch) {
-        onRouteUnmatch(ctx);
-      }
+      onRouteUnmatch?.(ctx);
       throw createError(404);
     }
     ctx.routeMatched = routeMatched;
@@ -46,48 +83,47 @@ export default ({
       throw createError(405);
     }
     ctx.requestHandler = requestHandler;
+
     if (onRequest) {
       await onRequest(ctx);
-      assert(!ctx.signal.aborted);
-      assert(!ctx.socket.destroyed);
+      validateContextState(ctx);
       if (ctx.response) {
         ctx.routeMatched = null;
         ctx.requestHandler = null;
       }
     }
+
     if (!ctx.routeMatched) {
       return;
     }
+
     ctx.request.params = ctx.routeMatched.urlMatch(ctx.request.pathname).params;
 
-    if (ctx.requestHandler && ctx.requestHandler.query) {
+    if (ctx.requestHandler?.query) {
       ctx.request.query = ctx.requestHandler.query(ctx.request.query);
     } else if (ctx.routeMatched.query) {
       ctx.request.query = ctx.routeMatched.query(ctx.request.query);
     }
 
-    if (ctx.requestHandler && ctx.requestHandler.match) {
-      if (!ctx.requestHandler.match(ctx.request)) {
-        throw createError(400);
-      }
-    } else if (ctx.routeMatched.match && !ctx.routeMatched.match(ctx.request)) {
+    const matchFn = ctx.requestHandler?.match || ctx.routeMatched.match;
+
+    if (matchFn && !matchFn(ctx.request)) {
       throw createError(400);
     }
 
     if (ctx.socket.writable && ctx.routeMatched.onPre) {
       await ctx.routeMatched.onPre(ctx);
-      assert(!ctx.socket.destroyed);
-      assert(!ctx.signal.aborted);
+      validateContextState(ctx);
     }
 
     if (!isHttpWebSocketUpgrade(ctx.request)) {
       if (ctx.requestHandler.validate) {
         ctx.request.isPauseDisable = true;
       }
+      if (ctx.forward && hasHttpBodyContent(ctx.request.headers)) {
+        ctx.request.body = new PassThrough();
+      }
       if (ctx.forward) {
-        if (hasHttpBodyContent(ctx.request.headers)) {
-          ctx.request.body = new PassThrough();
-        }
         await attachRequestForward(ctx);
       }
     }
@@ -118,6 +154,7 @@ export default ({
     if (ctx.request.connection || !ctx.requestHandler) {
       return;
     }
+
     if (ctx.forward) {
       assert(ctx.requestForward);
       await ctx.requestHandler.fn(ctx);
@@ -147,6 +184,7 @@ export default ({
       throw createError(400, JSON.stringify(ctx.requestHandler.validate.errors));
     }
     await ctx.requestHandler.fn(ctx);
+    validateContextState(ctx);
     if (ctx.forward) {
       await attachRequestForward(ctx);
     }
@@ -159,8 +197,7 @@ export default ({
             resolve();
           });
         });
-        assert(!ctx.signal.aborted);
-        assert(!ctx.socket.destroyed);
+        validateContextState(ctx);
         if (ctx.response == null) {
           ctx.response = {
             ...ctx.requestForward.response,
@@ -176,30 +213,9 @@ export default ({
       console.warn(`${ctx.request.method} ${ctx.request.path} ctx.response unconfig`);
       throw createError(503);
     }
-    if (ctx.request.method !== 'OPTIONS' && ctx.routeMatched && ctx.routeMatched.select) {
-      if (!Object.hasOwnProperty.call(ctx.response, 'data')) {
-        if (ctx.response.body instanceof Readable
-          && ctx.response.body.readable
-        ) {
-          if (ctx.response.headers) {
-            const contentLengthWithResponse = getHeaderValue(ctx.response.headers, 'content-length');
-            const contentTypeWithResponse = getHeaderValue(ctx.response.headers, 'content-type');
-            if (contentLengthWithResponse === 0) {
-              ctx.response.body = null;
-              ctx.response.data = null;
-            } else if (contentTypeWithResponse && /application\/json/i.test(contentTypeWithResponse) && !ctx.signal.aborted) {
-              const buf = await readStream(ctx.response.body, ctx.signal);
-              if (!ctx.socket.destroyed) {
-                ctx.response.body = buf;
-                ctx.response.data = ctx.routeMatched.select(decodeContentToJSON(buf, ctx.response.headers));
-              }
-            }
-          }
-        }
-      } else {
-        ctx.response.data = ctx.routeMatched.select(ctx.response.data);
-      }
-    }
+
+    await processResponseSelection(ctx);
+
     if (onResponse) {
       await onResponse(ctx);
     }
