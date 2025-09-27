@@ -48,12 +48,16 @@ const processResponseSelection = async (ctx) => {
     ctx.response.data = null;
     return;
   }
-  if (contentTypeWithResponse && /application\/json/i.test(contentTypeWithResponse) && !ctx.signal.aborted) {
-    const buf = await readStream(ctx.response.body, ctx.signal);
-    if (!ctx.socket.destroyed) {
-      ctx.response.body = buf;
-      ctx.response.data = ctx.routeMatched.select(decodeContentToJSON(buf, ctx.response.headers));
-    }
+  if (!contentTypeWithResponse
+    || ctx.signal.aborted
+    || !/application\/json/i.test(contentTypeWithResponse)
+  ) {
+    return;
+  }
+  const buf = await readStream(ctx.response.body, ctx.signal);
+  if (!ctx.socket.destroyed) {
+    ctx.response.body = buf;
+    ctx.response.data = ctx.routeMatched.select(decodeContentToJSON(buf, ctx.response.headers));
   }
 };
 
