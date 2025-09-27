@@ -24,7 +24,6 @@ const handleStreamBody = (response, stream) => {
     return null;
   }
 
-  // 确保流不可读且存在 data 属性
   assert(!stream.readable, 'Stream should not be readable');
   assert(
     Object.prototype.hasOwnProperty.call(response, 'data'),

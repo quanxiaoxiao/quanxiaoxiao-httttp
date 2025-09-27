@@ -38,22 +38,27 @@ const processResponseSelection = async (ctx) => {
   ) {
     return;
   }
+
   if (!ctx.response.headers) {
     return;
   }
+
   const contentLengthWithResponse = getHeaderValue(ctx.response.headers, 'content-length');
   const contentTypeWithResponse = getHeaderValue(ctx.response.headers, 'content-type');
+
   if (contentLengthWithResponse === 0) {
     ctx.response.body = null;
     ctx.response.data = null;
     return;
   }
+
   if (!contentTypeWithResponse
     || ctx.signal.aborted
     || !/application\/json/i.test(contentTypeWithResponse)
   ) {
     return;
   }
+
   const buf = await readStream(ctx.response.body, ctx.signal);
   if (!ctx.socket.destroyed) {
     ctx.response.body = buf;
