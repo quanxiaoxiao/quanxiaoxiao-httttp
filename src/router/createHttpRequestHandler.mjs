@@ -70,6 +70,7 @@ export default ({
   list: routeMatchList,
   onRequest,
   onRouteUnmatch,
+  onRouteMethodUnmatch,
   onCors,
   onResponse,
   onHttpError,
@@ -89,6 +90,7 @@ export default ({
         onCors(ctx);
         return;
       }
+      onRouteMethodUnmatch?.(ctx);
       throw createError(405);
     }
     ctx.requestHandler = requestHandler;
