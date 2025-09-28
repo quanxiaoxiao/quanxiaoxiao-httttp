@@ -71,7 +71,6 @@ export default ({
   onRequest,
   onRouteUnmatch,
   onRouteMethodUnmatch,
-  onCors,
   onResponse,
   onHttpError,
 }) => ({
@@ -79,29 +78,30 @@ export default ({
     const routeMatched = routeMatchList.find((routeItem) => routeItem.urlMatch(ctx.request.pathname));
     if (!routeMatched) {
       onRouteUnmatch?.(ctx);
-      throw createError(404);
+      if (!ctx.response) {
+        throw createError(404);
+      }
+    } else {
+      ctx.routeMatched = routeMatched;
     }
-    ctx.routeMatched = routeMatched;
   },
   onHttpRequestHeader: async (ctx) => {
-    const requestHandler = ctx.routeMatched[ctx.request.method];
-    if (!requestHandler) {
-      if (ctx.request.method === 'OPTIONS' && onCors) {
-        onCors(ctx);
-        return;
-      }
+    const requestHandler = ctx.routeMatched ? ctx.routeMatched[ctx.request.method] : null;
+    if (ctx.routeMatched && !requestHandler) {
       onRouteMethodUnmatch?.(ctx);
-      throw createError(405);
+      if (!ctx.response) {
+        throw createError(405);
+      }
     }
     ctx.requestHandler = requestHandler;
 
     if (onRequest) {
       await onRequest(ctx);
       validateContextState(ctx);
-      if (ctx.response) {
-        ctx.routeMatched = null;
-        ctx.requestHandler = null;
-      }
+    }
+    if (ctx.response) {
+      ctx.routeMatched = null;
+      ctx.requestHandler = null;
     }
 
     if (!ctx.routeMatched) {
