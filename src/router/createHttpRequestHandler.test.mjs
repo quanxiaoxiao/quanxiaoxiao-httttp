@@ -21,7 +21,7 @@ const _getPort = () => {
 
 const getPort = _getPort();
 
-test('createHttpRequestHandler', { only: true }, async () => {
+test('createHttpRequestHandler', async () => {
   const port = getPort();
   const routeMatchList = generateRouteMatchList({
     '/test': {
@@ -755,6 +755,15 @@ test('createHttpRequestHandler 3333', async () => {
       socket,
       ...createHttpRequestHandler({
         list: routeMatchList,
+        onRouteMethodUnmatch: (ctx) => {
+          ctx.response = {
+            statusCode: 204,
+            body: null,
+            headers: {
+              'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+            },
+          };
+        },
       }),
     });
   });
@@ -775,5 +784,14 @@ test('createHttpRequestHandler 3333', async () => {
     () => getSocketConnect({ port }),
   );
   assert.equal(ret.statusCode, 400);
+  ret = await request(
+    {
+      method: 'OPTIONS',
+      path: '/test/123?name=quan&age=33&foo=ffff&bar=bbb',
+    },
+    () => getSocketConnect({ port }),
+  );
+  assert.equal(ret.statusCode, 204);
+  assert.equal(ret.headers['access-control-allow-methods'], 'POST, GET, OPTIONS');
   server.close();
 });

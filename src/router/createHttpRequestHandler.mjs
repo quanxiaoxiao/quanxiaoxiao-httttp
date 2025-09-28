@@ -99,6 +99,7 @@ export default ({
       await onRequest(ctx);
       validateContextState(ctx);
     }
+
     if (ctx.response) {
       ctx.routeMatched = null;
       ctx.requestHandler = null;
