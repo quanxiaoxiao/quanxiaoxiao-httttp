@@ -677,7 +677,9 @@ export default (options) => {
         }
       },
       onClose: () => {
-        assert(!controller.signal.aborted, 'Controller should not be aborted');
+        if (controller.signal.aborted) {
+          return;
+        }
         controller.abort();
 
         if (state.currentStep !== HTTP_STEP_RESPONSE_END && state.currentStep !== HTTP_STEP_EMPTY) {
