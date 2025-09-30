@@ -93,10 +93,15 @@ export default ({
         throw createError(405);
       }
     }
+
     ctx.requestHandler = requestHandler;
 
-    if (onRequest) {
+    if (onRequest
+      && ctx.routeMatched
+      && ctx.requestHandler
+      && !ctx.response) {
       await onRequest(ctx);
+      // maybe ctx.response set
       validateContextState(ctx);
     }
 
